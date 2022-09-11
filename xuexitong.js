@@ -1,6 +1,3 @@
-/**
- * 学习通
- */
 
 // 当前小节
 window.unitCount = $(".ncells h4").index($(".currents")) + 1;
