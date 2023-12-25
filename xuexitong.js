@@ -3,9 +3,11 @@
  */
 
 // 当前小节
-window.unitCount = $(".ncells h4").index($(".currents")) + 1;
+window.unitCount = $(".posCatalog_active").index(".posCatalog_select");
 // 获取小节数量
-window.unit = $(".ncells h4").length;
+window.unit = $(".posCatalog_level span em").length;
+
+
 
 function main(){
     const frameObj = $("iframe").eq(0).contents().find("iframe.ans-insertvideo-online");
@@ -40,9 +42,10 @@ function watchVideo(frameObj, v_done){
     var playDoneEvent = new Event("playdone");
     // 获取播放对象
     var v = undefined;
-    v = frameObj.contents().eq(v_done).find("video#video_html5_api").get(0);window.a = v;
+    v = frameObj.contents().eq(v_done).find("video#video_html5_api").get(0);
+    window.a = v;
     // 设置倍速
-    try{ v.playbackRate = 8;}
+    try{ v.playbackRate = 2;}
     catch(e){console.error("倍速设置失败！此节可能有需要回复内容，不影响，跳至下一节。错误信息："+e); nextUnit(); return;}
     // 播放
     v.play();
@@ -63,7 +66,10 @@ function nextUnit(){
     console.log("%c即将进入下一节...","color:red;font-size:18px");
     setTimeout(() => {
         $(document).scrollTop($(document).height()-$(window).height());
-        $(".orientationright").click();
+        $("#prevNextFocusNext").click()
+        $(".nextChapter").eq(0).click()
+        $("#prevNextFocusNext").click()
+        $(".nextChapter").eq(0).click()
         console.log("%c行了别看了，我知道你学会了，下一节","color:red;font-size:18px");// (已经跳转" +(++window.unitCount)+"次)");
         if(window.unitCount++ < window.unit){ setTimeout(() => main(), 10000) }
     }, 6000);
