@@ -17,10 +17,9 @@
             return this._cellData;
         },
         run() {
-            this._getVideoEl();
             this._getTreeContainer();
             this._initCellData();
-            this._videoEventHandle();
+            this._getVideoEl();
         },
         /// 选择并播放下一小节视频（需要先调用run方法初始化数据）
         nextUnit() {
@@ -48,6 +47,7 @@
             }
 
         },
+        _tryTimes: 0,
         /// 播放当前视频（需要先调用run方法初始化数据）
         async play() {
             try {
@@ -55,8 +55,16 @@
                 /// 设置倍数，并播放
                 el.playbackRate = this.configs.playbackRate;
                 await el.play();
+                this._tryTimes = 0;
             } catch (e) {
-                console.error("视频播放失败", e)
+                if (this._tryTimes > 5) {
+                    console.error("视频播放失败", e)
+                    return;
+                }
+                setTimeout(() => {
+                    this._tryTimes++;
+                    this.play();
+                }, 1000);
             }
         },
         /// 播放当前指向的小节视频（需要先调用run方法初始化数据）
@@ -76,6 +84,10 @@
             const span = $nCell.find("span")[0];
             $(a).click(); /// 切换菜单
             $(span).click(); //更换视频源
+            this._videoEl = null;
+
+            /// 下列的play方法可以改进
+            /// 监听frame加载成功后再调用等，此处暂时省略了，通过循环尝试的方式进行播放
             setTimeout(() => {
                 this._initCellData();
                 if (this.configs.autoplay) {
@@ -129,18 +141,20 @@
                     throw new Error("找不到视频播放区域iframe")
                 }
                 this._videoEl = frameObj.contents().eq(0).find("video#video_html5_api").get(0);
+                this._videoEventHandle();
             }
             if (!this._videoEl) {
-                throw new Error("找不到视频组件Video")
+                throw new Error("视频组件Video未加载完成")
             }
             return this._videoEl;
         },
         /// 播放器事件处理
         _videoEventHandle() {
-            if (this.configs.autoplay) {
-                this.play();
+            const el = this._videoEl;
+            if (!el) {
+                console.log("videoEl未加载");
+                return;
             }
-            const el = this._getVideoEl();
             el.addEventListener("ended", e => {
                 const title = this._cellData.currentVideoTitle;
                 console.warn(`============${title} 播放完成=============`)
@@ -159,6 +173,9 @@
             el.addEventListener("pause", e => {
                 console.log("============视频已暂停=============")
             })
+            if (this.configs.autoplay) {
+                this.play();
+            }
         },
 
     }
