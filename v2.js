@@ -19,6 +19,7 @@
         run() {
             this._getTreeContainer();
             this._initCellData();
+            this._videoEl = null;
             this._getVideoEl();
         },
         /// 选择并播放下一小节视频（需要先调用run方法初始化数据）
