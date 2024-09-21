@@ -1,7 +1,7 @@
 (function () {
     window.app = {
         configs: {
-            playbackRate: 2, /// 倍数
+            playbackRate: 2, /// 倍数（经过试验，仅支持2倍数，更高的倍数会被限制导致视频暂停）
             autoplay: true, /// 自动播放
         },
         _videoEl: null,
@@ -22,41 +22,8 @@
             this._initCellData();
             this._videoEventHandle();
         },
-        async play() {
-            try {
-                const el = this._getVideoEl();
-                /// 设置倍数，并播放
-                el.playbackRate = this.configs.playbackRate;
-                await el.play();
-            } catch (e) {
-                console.error("视频播放失败", e)
-            }
-        },
-        playCurrentIndex(nCell) {
-            if (!nCell) {
-                const el = this._getTreeContainer();
-                const cells = el.find(".cells");
-                const nCells = $(cells.get(this._cellData.currentCellIndex)).find(".ncells");
-                nCell = nCells.get(this._cellData.currentNCellIndex)
-            }
-            const $nCell = $(nCell);
-            const a = $nCell.find("a")[0];
-            if (!a) {
-                console.error("===========找不到节点A链接，播放下一个视频失败==============")
-                return;
-            }
-            const span = $nCell.find("span")[0];
-            $(a).click(); /// 切换菜单
-            $(span).click(); //更换视频源
-            setTimeout(() => {
-                this._initCellData();
-                if (this.configs.autoplay) {
-                    this.play();
-                }
-            }, 1000)
-        },
-        /// 选择并播放下一个视频
-        nextVideo() {
+        /// 选择并播放下一小节视频（需要先调用run方法初始化数据）
+        nextUnit() {
             const el = this._getTreeContainer();
             const cells = el.find(".cells");
             const nCells = $(cells.get(this._cellData.currentCellIndex)).find(".ncells");
@@ -81,6 +48,42 @@
             }
 
         },
+        /// 播放当前视频（需要先调用run方法初始化数据）
+        async play() {
+            try {
+                const el = this._getVideoEl();
+                /// 设置倍数，并播放
+                el.playbackRate = this.configs.playbackRate;
+                await el.play();
+            } catch (e) {
+                console.error("视频播放失败", e)
+            }
+        },
+        /// 播放当前指向的小节视频（需要先调用run方法初始化数据）
+        playCurrentIndex(nCell) {
+            if (!nCell) {
+                const el = this._getTreeContainer();
+                const cells = el.find(".cells");
+                const nCells = $(cells.get(this._cellData.currentCellIndex)).find(".ncells");
+                nCell = nCells.get(this._cellData.currentNCellIndex)
+            }
+            const $nCell = $(nCell);
+            const a = $nCell.find("a")[0];
+            if (!a) {
+                console.error("===========找不到节点A链接，播放下一个视频失败==============")
+                return;
+            }
+            const span = $nCell.find("span")[0];
+            $(a).click(); /// 切换菜单
+            $(span).click(); //更换视频源
+            setTimeout(() => {
+                this._initCellData();
+                if (this.configs.autoplay) {
+                    this.play();
+                }
+            }, 1000)
+        },
+
         _initCellData() {
             const el = this._getTreeContainer();
             const cells = el.find(".cells");
@@ -141,7 +144,7 @@
             el.addEventListener("ended", e => {
                 const title = this._cellData.currentVideoTitle;
                 console.warn(`============${title} 播放完成=============`)
-                this.nextVideo();
+                this.nextUnit();
             })
             el.addEventListener("loadedmetadata", e => {
                 console.log(`============视频加载完成=============`)
