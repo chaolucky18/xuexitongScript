@@ -1,34 +1,85 @@
 /**
  * 学习通
  */
+/**
+ * 仍然存在问题：
+ * 1. 学习通可能要求必须完成每一节的答题才能进入下一节，这种情况下脚本会卡住，需要手动完成答题
+ * 2. 视频播放完毕后可能会出现悬浮答题界面，但可以通过等待或点击下一节按钮跳过
+ */
 
+// 新版学习通元素Selectors，便于后续修改
+const videoButtonSelector = "#video button";
+const courseTreeNodeSelector = "#coursetree";
+const courseLayerSelector = ".posCatalog_select";
+const courseTitleSelector = ".posCatalog_name";
+const courseSectionSelector = ".posCatalog_sbar";
+const courseCompletedSelector = "span.icon_Completed.prevTips";
+/**
+ *
+ * @returns {Array<{section: string, course: string, element: HTMLElement}>}
+ * @description 获取所有课程数据
+ */
+function GetAllCourses() {
+	let courseData = [];
+
+	const courseTree = document.querySelector(courseTreeNodeSelector);
+
+	// 所有层级课程元素都含有 .posCatalog_select 类名
+	// 但是章节名称元素还有一个额外的 .firstLayer 类名
+	const courses = courseTree.querySelectorAll(
+		courseLayerSelector + ":not(.firstLayer)"
+	);
+
+	courses.forEach((course) => {
+		const courseName = course
+			.querySelector(courseTitleSelector)
+			?.getAttribute("title");
+		const sectionName = course.querySelector(
+			courseSectionSelector
+		)?.textContent;
+
+		if (courseName && sectionName) {
+			courseData.push({
+				section: sectionName.trim(),
+				course: courseName.trim(),
+				element: course,
+			});
+		} else {
+			console.warn("未找到课程名称或章节名称！这可能会是一个错误！", course);
+		}
+	});
+
+	return courseData;
+}
+
+const courseDatas = GetAllCourses();
+const courseCount = courseDatas.length;
+console.log("课程数量：", courseCount);
+let unitCount = 0;
+try {
+	// section是章节，例如"1.1.2"，取小数点前的数字即为章节数
+	unitCount = courseDatas[courseCount - 1].section?.split(".")[0];
+	console.log("章节数量：", unitCount);
+} catch (error) {
+	console.error("获取章节数量失败！(并不影响程序运作)", error);
+}
 // 当前小节
-// 确保页面中存在至少一个激活的小节元素
-const activeElement = $(".posCatalog_select.posCatalog_active");
-
-if (activeElement.length) {
-	// 先获取所有章节标题元素的父级（假设章节标题和小节同级）
-	const chapterTitles = $(".posCatalog_select:has(.posCatalog_title)");
-
-	// 获取章节标题之外的所有小节元素
-	const substantiveSiblings = $(".posCatalog_select").not(chapterTitles);
-
-	// 在实质性小节中找到当前活跃小节的索引
-	let unitCount = substantiveSiblings.index(activeElement);
-
-	// jQuery 的 .index() 方法返回值是从0开始的，如果需要从1开始计数，可以加1
-	unitCount += 1;
-
-	// 若找不到有效的小节同级元素，则设定默认值
-	if (!substantiveSiblings.length || unitCount === -1) {
-		console.warn("未找到有效的.posCatalog_select同级元素！");
-		unitCount = -1;
+// 页面中激活的小节元素
+const completedCourses = document.querySelectorAll(courseCompletedSelector);
+if (completedCourses.length > 0) {
+	// 选取当前小节
+	const currentCourseData = courseDatas[completedCourses.length];
+	//console.log("当前小节：", currentCourseData);
+	let currentCourse = currentCourseData?.element;
+	if (currentCourse) {
+		// 跳转到当前小节
+		Array.from(currentCourse.querySelectorAll("*")).forEach(
+			(e) => e.hasAttribute("onclick") && e.click()
+		)
+			? [0].click()
+			: null;
 	}
-
-	// 将结果赋值到全局作用域
-	window.unitCount = unitCount;
-} else {
-	console.error("未找到激活的小节元素！");
+	window.currentCourseCount = courseDatas.indexOf(currentCourseData);
 }
 // 获取小节数量
 window.unit = $(".posCatalog_level span em").length;
@@ -131,6 +182,7 @@ function nextUnit() {
 		}
 	}, 6000);
 }
+
 console.log(
 	"%c 欢迎使用本脚本，此科目有%c %d %c个小节，当前为 %c第%d小节 %c-chao",
 	"color:#6dbcff",
