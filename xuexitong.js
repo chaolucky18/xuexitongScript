@@ -81,12 +81,17 @@ if (completedCourses.length > 0) {
 	}
 	window.currentCourseCount = courseDatas.indexOf(currentCourseData);
 }
-// 获取小节数量
-window.unit = $(".posCatalog_level span em").length;
+
+// 存取小节数量
+window.unit = unitCount;
 
 function main() {
 	// 尝试点击视频按钮
-	document.querySelector('li[title="视频"]').click();
+	// try {
+	// 	document.querySelector(videoButtonSelector).click();
+	// } catch (error) {
+	// 	console.error("点击视频按钮失败！", error);
+	// }
 	// 等待几秒后执行视频存在性检查和其他操作
 	setTimeout(() => {
 		const frameObj = $("iframe")
@@ -130,6 +135,7 @@ function main() {
 		}
 	}, 3000); // 3000毫秒（即3秒）后执行
 }
+
 function watchVideo(frameObj, v_done) {
 	// 添加播放事件
 	var playDoneEvent = new Event("playdone");
@@ -165,6 +171,7 @@ function watchVideo(frameObj, v_done) {
 		}
 	}, 1000);
 }
+
 function nextUnit() {
 	console.log("%c即将进入下一节...", "color:red;font-size:18px");
 	setTimeout(() => {
@@ -184,13 +191,17 @@ function nextUnit() {
 }
 
 console.log(
-	"%c 欢迎使用本脚本，此科目有%c %d %c个小节，当前为 %c第%d小节 %c-chao",
+	"%c 欢迎使用本脚本，此科目共有%c %d %c个章节%c %d %c节课，当前为 %c第%d节课:%s %c-chao",
 	"color:#6dbcff",
 	"color:red",
 	window.unit,
 	"color:#6dbcff",
 	"color:red",
-	window.unitCount,
+	courseCount,
+	"color:#6dbcff",
+	"color:red",
+	window.currentCourseCount + 1,
+	courseDatas[window.currentCourseCount]?.course,
 	"font-size:8px"
 );
 main();
