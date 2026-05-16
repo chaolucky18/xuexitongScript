@@ -8,16 +8,14 @@
 - 从“学习目标”步骤自动切到“视频”步骤
 - 手动点“2视频”页签后自动重新接管播放
 
-这版的目标是保持原模板的行为方式，不再额外叠加复杂的后台保活、通知、测试按钮等附加层，尽量减少冲突。
+这版的目标是保持原模板的行为方式，不再额外叠加复杂通知、测试按钮等附加层，尽量减少冲突。当前仍保留基础播放恢复逻辑，用于处理页面失焦、视频短暂停顿或进度停滞等常见中断场景。
 
 ## 文件说明
 
-- [v3_optimized.js](/E:/code/xuexitongScript-master/v3_optimized.js)
+- [v3_optimized.js](./v3_optimized.js)
   控制台直接执行版本
-- [v3_optimized.user.js](/E:/code/xuexitongScript-master/v3_optimized.user.js)
+- [v3_optimized.user.js](./v3_optimized.user.js)
   Tampermonkey 油猴版本
-- [test_serverchan_push.py](/E:/code/xuexitongScript-master/test_serverchan_push.py)
-  独立的 Server酱推送调试脚本
 
 ## 当前脚本行为
 
@@ -47,6 +45,8 @@ configs: {
     retryInterval: 2000,
     maxRetries: 10,
     videoCheckInterval: 1000,
+    guardNoProgressMs: 7000,
+    guardResumeCooldownMs: 1500,
 }
 ```
 
@@ -71,7 +71,7 @@ configs: {
 1. 打开学习通课程播放页
 2. 按 `F12`
 3. 进入 `Console`
-4. 复制 [v3_optimized.js](/E:/code/xuexitongScript-master/v3_optimized.js) 全部内容
+4. 复制 [v3_optimized.js](./v3_optimized.js) 全部内容
 5. 粘贴并执行
 
 首次执行后可用：
@@ -84,7 +84,7 @@ app.nextUnit()
 ### 方法二：Tampermonkey
 
 1. 安装 Tampermonkey
-2. 导入 [v3_optimized.user.js](/E:/code/xuexitongScript-master/v3_optimized.user.js)
+2. 导入 [v3_optimized.user.js](./v3_optimized.user.js)
 3. 确认脚本已启用
 4. 刷新学习通播放页面
 
@@ -108,7 +108,7 @@ The play() request was interrupted by a call to pause()
 
 ### 2. 为什么会出现重复日志
 
-如果同一页面反复粘贴执行脚本，会导致同一套监听和定时逻辑叠加，从而出现多次日志。
+当前版本已经对主要的视频事件、步骤切换事件和页面状态事件做了去重处理。若仍然看到重复日志，通常是页面自身播放器事件重复触发，或同时启用了油猴版并在控制台手动执行了脚本。
 
 建议：
 
