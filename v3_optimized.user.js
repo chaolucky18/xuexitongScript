@@ -41,6 +41,7 @@
             _isPlaying: false,
             _currentRetryCount: 0,
             _checkInterval: null,
+            _boundVideoHandlers: null,
             _cellData: {
                 cells: 0,
                 nCells: 0,
@@ -108,7 +109,12 @@
                 }
                 this._guardLastResumeTs = now;
 
-                const video = this._getVideoEl();
+                let video = null;
+                try {
+                    video = this._getVideoEl();
+                } catch (e) {
+                    return;
+                }
                 if (!video || !this._isPlaying) return;
 
                 console.log(`%c触发视频保活恢复(${reason})`, 'color:#607D8B');
@@ -176,12 +182,15 @@
                             }, 2000);
                             return;
                         }
-                        console.log('%c===========跳过章节测验，2秒后继续播放==============', 'color:#607D8B');
-                        $('#prevNextFocusNext').click();
-                        setTimeout(() => {
-                            this.play();
-                        }, 2000);
-                        return;
+                        if (this._getCurrentStepTitle() === '章节测验') {
+                            console.log('%c===========跳过章节测验，2秒后继续播放==============', 'color:#607D8B');
+                            $('#prevNextFocusNext').click();
+                            setTimeout(() => {
+                                this.play();
+                            }, 2000);
+                            return;
+                        }
+                        throw new Error('视频元素为空，等待页面加载完成');
                     }
 
                     this._tryTimes = 0;
@@ -215,8 +224,7 @@
                     return true;
                 }
 
-                const prevTitle = document.getElementsByClassName('prev_title')[0];
-                const currentStepTitle = prevTitle ? (prevTitle.title || prevTitle.textContent || '').trim() : '';
+                const currentStepTitle = this._getCurrentStepTitle();
 
                 if (currentStepTitle === '章节测验' || currentStepTitle === '视频') {
                     return false;
@@ -241,6 +249,10 @@
 
                 return false;
             },
+            _getCurrentStepTitle() {
+                const prevTitle = document.getElementsByClassName('prev_title')[0];
+                return prevTitle ? (prevTitle.title || prevTitle.textContent || '').trim() : '';
+            },
             _bindStepNavigation() {
                 if (this._stepNavigationBound) {
                     return;
@@ -260,7 +272,8 @@
                     }, 1800);
                 };
 
-                $(document).on('click', '.prev_white', (e) => {
+                $(document).off('click.xxtV3StepNavigation', '.prev_white');
+                $(document).on('click.xxtV3StepNavigation', '.prev_white', (e) => {
                     const text = ($(e.currentTarget).text() || '').replace(/\s+/g, '');
                     if (text.includes('视频')) {
                         console.log(`%c检测到步骤切换点击：${text}，准备重新接管视频页`, 'color:#607D8B');
@@ -387,15 +400,28 @@
                     return;
                 }
 
-                el.removeEventListener('ended', this._handleVideoEnded);
-                el.removeEventListener('loadedmetadata', this._handleVideoLoaded);
-                el.removeEventListener('play', this._handleVideoPlay);
-                el.removeEventListener('pause', this._handleVideoPause);
+                if (!this._boundVideoHandlers) {
+                    this._boundVideoHandlers = {
+                        ended: this._handleVideoEnded.bind(this),
+                        loadedmetadata: this._handleVideoLoaded.bind(this),
+                        play: this._handleVideoPlay.bind(this),
+                        pause: this._handleVideoPause.bind(this),
+                    };
+                }
 
-                el.addEventListener('ended', this._handleVideoEnded.bind(this));
-                el.addEventListener('loadedmetadata', this._handleVideoLoaded.bind(this));
-                el.addEventListener('play', this._handleVideoPlay.bind(this));
-                el.addEventListener('pause', this._handleVideoPause.bind(this));
+                if (el.__xxtV3VideoHandlers) {
+                    el.removeEventListener('ended', el.__xxtV3VideoHandlers.ended);
+                    el.removeEventListener('loadedmetadata', el.__xxtV3VideoHandlers.loadedmetadata);
+                    el.removeEventListener('play', el.__xxtV3VideoHandlers.play);
+                    el.removeEventListener('pause', el.__xxtV3VideoHandlers.pause);
+                }
+
+                el.__xxtV3VideoHandlers = this._boundVideoHandlers;
+
+                el.addEventListener('ended', this._boundVideoHandlers.ended);
+                el.addEventListener('loadedmetadata', this._boundVideoHandlers.loadedmetadata);
+                el.addEventListener('play', this._boundVideoHandlers.play);
+                el.addEventListener('pause', this._boundVideoHandlers.pause);
             },
             _handleVideoEnded(e) {
                 const title = this._cellData.currentVideoTitle;
@@ -442,22 +468,39 @@
                 }
             };
 
-            document.addEventListener('mouseleave', preventPause);
-            window.addEventListener('mouseleave', preventPause);
-            document.addEventListener('mouseout', preventPause);
-            window.addEventListener('mouseout', preventPause);
+            if (window.__xxtV3GlobalHandlers) {
+                document.removeEventListener('mouseleave', window.__xxtV3GlobalHandlers.preventPause);
+                window.removeEventListener('mouseleave', window.__xxtV3GlobalHandlers.preventPause);
+                document.removeEventListener('mouseout', window.__xxtV3GlobalHandlers.preventPause);
+                window.removeEventListener('mouseout', window.__xxtV3GlobalHandlers.preventPause);
+                window.removeEventListener('blur', window.__xxtV3GlobalHandlers.handleBlur);
+                document.removeEventListener('visibilitychange', window.__xxtV3GlobalHandlers.handleVisibilityChange);
+            }
 
-            window.addEventListener('blur', () => {
+            const handleBlur = () => {
                 console.log('%c页面失去焦点，保持播放状态', 'color:#607D8B');
                 resumePlaybackNow();
-            });
+            };
 
-            document.addEventListener('visibilitychange', () => {
+            const handleVisibilityChange = () => {
                 if (document.hidden) {
                     console.log('%c页面切到后台，尝试保持播放状态', 'color:#607D8B');
                 }
                 resumePlaybackNow();
-            });
+            };
+
+            window.__xxtV3GlobalHandlers = {
+                preventPause,
+                handleBlur,
+                handleVisibilityChange,
+            };
+
+            document.addEventListener('mouseleave', preventPause);
+            window.addEventListener('mouseleave', preventPause);
+            document.addEventListener('mouseout', preventPause);
+            window.addEventListener('mouseout', preventPause);
+            window.addEventListener('blur', handleBlur);
+            document.addEventListener('visibilitychange', handleVisibilityChange);
         } catch (error) {
             console.error('%c脚本运行失败: ', 'color:#F44336;font-weight:bold', error.message);
             console.log('请检查是否在正确的课程播放页面，或者页面结构是否再次发生改变。');
