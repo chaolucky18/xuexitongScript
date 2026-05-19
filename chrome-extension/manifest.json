@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Xuexitong Script 1x",
+  "version": "3.2.0.9",
+  "description": "Runs the local Xuexitong autoplay script with default playback speed set to 1x.",
+  "content_scripts": [
+    {
+      "matches": [
+        "*://mooc1.chaoxing.com/mycourse/studentstudy*",
+        "*://*.chaoxing.com/mycourse/studentstudy*",
+        "*://*.chaoxing.com/mooc2-ans/mycourse/studentstudy*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["v3_optimized.user.js"],
+      "matches": ["*://*.chaoxing.com/*"]
+    }
+  ]
+}

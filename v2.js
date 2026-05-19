@@ -16,7 +16,7 @@
     function initializePlayer() {
         window.app = {
             configs: {
-                playbackRate: 2, /// 倍数（某些平台高倍数可能导致视频暂停，2倍是比较稳妥的速率）
+                playbackRate: 1, /// 倍数（默认 1 倍播放）
                 autoplay: true, /// 自动播放
             },
             _videoEl: null,

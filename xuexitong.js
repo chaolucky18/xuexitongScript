@@ -78,7 +78,7 @@ function watchVideo(frameObj, v_done) {
     window.a = v;
     // 设置倍速
     try {
-        v.playbackRate = 2;
+        v.playbackRate = 1;
     } catch (e) {
         console.error("倍速设置失败！此节可能有需要回复内容，不影响，跳至下一节。错误信息：" + e);
         nextUnit();
