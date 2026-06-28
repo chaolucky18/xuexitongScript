@@ -428,39 +428,46 @@
             },
         };
 
-        try {
+        function startWhenReady() {
+            if (location.hostname.startsWith('mooc1')) {
+                if ($('#coursetree').find('.posCatalog_select').length > 0) {
+                    window.app.run();
+                    return;
+                }
+                console.log('%c等待课程目录数据加载...', 'color:#FF9800');
+                setTimeout(startWhenReady, 500);
+                return;
+            }
             window.app.run();
-
-            const preventPause = (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-            };
-
-            const resumePlaybackNow = () => {
-                if (window.app && typeof window.app._tryResumePlayback === 'function') {
-                    window.app._tryResumePlayback('page-event');
-                }
-            };
-
-            document.addEventListener('mouseleave', preventPause);
-            window.addEventListener('mouseleave', preventPause);
-            document.addEventListener('mouseout', preventPause);
-            window.addEventListener('mouseout', preventPause);
-
-            window.addEventListener('blur', () => {
-                console.log('%c页面失去焦点，保持播放状态', 'color:#607D8B');
-                resumePlaybackNow();
-            });
-
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) {
-                    console.log('%c页面切到后台，尝试保持播放状态', 'color:#607D8B');
-                }
-                resumePlaybackNow();
-            });
-        } catch (error) {
-            console.error('%c脚本运行失败: ', 'color:#F44336;font-weight:bold', error.message);
-            console.log('请检查是否在正确的课程播放页面，或者页面结构是否再次发生改变。');
         }
+        startWhenReady();
+
+        const preventPause = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+        };
+
+        const resumePlaybackNow = () => {
+            if (window.app && typeof window.app._tryResumePlayback === 'function') {
+                window.app._tryResumePlayback('page-event');
+            }
+        };
+
+        document.addEventListener('mouseleave', preventPause);
+        window.addEventListener('mouseleave', preventPause);
+        document.addEventListener('mouseout', preventPause);
+        window.addEventListener('mouseout', preventPause);
+
+        window.addEventListener('blur', () => {
+            console.log('%c页面失去焦点，保持播放状态', 'color:#607D8B');
+            resumePlaybackNow();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.log('%c页面切到后台，尝试保持播放状态', 'color:#607D8B');
+            }
+            resumePlaybackNow();
+        });
     }
 })();
