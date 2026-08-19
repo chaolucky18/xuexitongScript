@@ -67,6 +67,7 @@
                 guardNoProgressMs: 7000,
                 guardResumeCooldownMs: 1500,
                 autoAdvanceNoVideo: false,
+                autoAnswerInteraction: true,
             },
             _videoEl: null,
             _treeContainerEl: null,
@@ -97,6 +98,7 @@
                 this._getVideoEl();
                 this._clearCheckInterval();
                 this._bindStepNavigation();
+                this._startInteractionWatcher();
                 this.play();
             },
             nextUnit() {
@@ -323,12 +325,113 @@
                 nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                 setTimeout(() => this.play(), 2000);
             },
+            _startInteractionWatcher() {
+                if (this._interactionWatcher) {
+                    return;
+                }
+                this._interactionHandledCount = 0;
+                this._interactionWatcher = setInterval(() => {
+                    try {
+                        this._handleVideoInteraction();
+                    } catch (e) {
+                        console.error('互动题处理失败:', e);
+                    }
+                }, 1500);
+            },
+            _stopInteractionWatcher() {
+                if (this._interactionWatcher) {
+                    clearInterval(this._interactionWatcher);
+                    this._interactionWatcher = null;
+                }
+            },
+            _isVisible(el) {
+                if (!el) return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            },
+            _findInteractionEl(doc) {
+                if (!doc || !this.configs.autoAnswerInteraction) return null;
+                const candidates = [
+                    ...doc.querySelectorAll('.answerQuestion, .interaction, .videoInteraction, [class*="answer" i], [class*="question" i], [class*="interaction" i]'),
+                ];
+                for (const el of candidates) {
+                    if (!this._isVisible(el)) continue;
+                    const text = (el.textContent || '').trim();
+                    if (text.length < 6 || text.length > 3000) continue;
+                    const hasPrompt = /(请选择|请回答|请作答|选择你认为|判断题|单选题|多选题|请你判断)/.test(text);
+                    const options = [...el.querySelectorAll('li, label, input[type=radio], input[type=checkbox]')]
+                        .filter((n) => {
+                            const t = (n.textContent || n.value || '').trim();
+                            return t.length > 0 && t.length <= 60 &&
+                                /^[A-H][、.．.\s]|^(对|错|正确|错误)\s*$/.test(t);
+                        });
+                    if (hasPrompt && options.length > 0) {
+                        return { el, options };
+                    }
+                }
+                return null;
+            },
+            _handleVideoInteraction() {
+                if (!this.configs.autoAnswerInteraction || this._interactionHandledCount >= 10) {
+                    return;
+                }
+                const scan = (doc, label) => {
+                    const found = this._findInteractionEl(doc);
+                    if (!found) return null;
+                    const { el, options } = found;
+                    if (this._interactionLastHtml === el.outerHTML) {
+                        return 'skipped';
+                    }
+                    this._interactionLastHtml = el.outerHTML;
+                    console.log(`%c检测到视频互动题[${label}]，自动选择第一个选项: "${(options[0].textContent || options[0].value || '').trim()}"`, 'color:#9C27B0');
+                    const firstOption = options[0];
+                    try {
+                        firstOption.click();
+                    } catch (e) {
+                        const radio = firstOption.querySelector('input[type=radio], input[type=checkbox]');
+                        if (radio) radio.click();
+                    }
+                    const submitButton = ['.answerQuestion .submitBtn', '.interaction .submitBtn', '[class*="answer"] [class*="btn"]', '[class*="question"] [class*="btn"]', 'button', 'a']
+                        .reduce((acc, sel) => {
+                            if (acc) return acc;
+                            const btn = [...el.querySelectorAll(sel)].find((b) => {
+                                const t = (b.textContent || '').trim();
+                                return /^(提交|继续|下一节|确定|完成)$/.test(t);
+                            });
+                            return btn || null;
+                        }, null);
+                    if (submitButton) {
+                        setTimeout(() => {
+                            try {
+                                submitButton.click();
+                            } catch (e) {}
+                        }, 500);
+                        console.log('%c已自动点击答题提交/继续按钮', 'color:#9C27B0');
+                    } else {
+                        console.warn('%c未找到互动题的提交按钮，仅完成了选项选择', 'color:#FF9800');
+                    }
+                    this._interactionHandledCount++;
+                    return 'handled';
+                };
+                const rootResult = scan(document, '主页面');
+                if (rootResult) return;
+                for (const frame of $('iframe').toArray()) {
+                    let frameDoc = null;
+                    try {
+                        frameDoc = frame.contentDocument;
+                    } catch (e) {
+                        continue;
+                    }
+                    if (!frameDoc) continue;
+                    const result = scan(frameDoc, '内嵌页面');
+                    if (result) return;
+                }
+            },
             _bindStepNavigation() {
                 if (this._stepNavigationBound) {
                     return;
                 }
                 this._stepNavigationBound = true;
-
                 const reenterVideoMode = () => {
                     this._videoEl = null;
                     this._isPlaying = false;
@@ -563,6 +666,7 @@
             destroy() {
                 this._isPlaying = false;
                 this._clearCheckInterval();
+                this._stopInteractionWatcher();
                 this._detachVideoEvents();
                 if (this._delayedNextUnitTimer) clearTimeout(this._delayedNextUnitTimer);
                 $(document).off('.xuexitongPlayerV3');

@@ -48,8 +48,11 @@ configs: {
     maxRetries: 10,
     videoCheckInterval: 1000,
     autoAdvanceNoVideo: false,
+    autoAnswerInteraction: true,
 }
 ```
+
+`autoAnswerInteraction`（默认开启）：视频播放中弹出"判断题/选择题"互动弹窗时，自动选择第一个选项并点击提交/继续按钮，随后视频恢复播放。如需关闭，在控制台执行 `app.configs.autoAnswerInteraction = false`。仅在页面同时出现题目文字与可识别选项时才触发，避免误点其他弹窗；复杂或无法识别的题型会安全跳过。
 
 ### 3. 视频结束后
 
