@@ -34,9 +34,32 @@ if (activeElement.length) {
 window.unit = $(".posCatalog_level span em").length;
 
 
+// F8（#14 #15 #16 #17 #18）：V1 版本的最小空值保护 + 多选择器兜底。
+// 旧写法 document.querySelector('li[title="视频"]').click() 在页面结构变化或目录/步骤标签尚未渲染完成时
+// 会抛 "Cannot read properties of null (reading 'click')"（issue #16 #17 #18 的堆栈正是 main() 第 39 行），
+// 并且会中断整个 V1 脚本。这里只做最小加固，不改动 V1 的其他逻辑（倍速、iframe 取视频等）。
+function clickFirstAvailable(selectors) {
+    for (const selector of selectors) {
+        let el = null;
+        try {
+            el = document.querySelector(selector);
+        } catch (e) {
+            el = null;
+        }
+        if (el && typeof el.click === "function") {
+            el.click();
+            return true;
+        }
+    }
+    return false;
+}
+
 function main() {
-    // 尝试点击视频按钮
-    document.querySelector('li[title="视频"]').click();
+    // 尝试点击视频按钮（F8：多选择器兜底 + 空值保护；两种写法来自 issue #18 的评论）
+    if (!clickFirstAvailable(['li[title="视频"]', 'button[title="播放视频"]'])) {
+        console.warn('%c未找到「视频」步骤入口（li[title="视频"] / button[title="播放视频"]），已跳过本次点击，脚本继续执行。', 'color:#FF9800');
+        console.log('处理方法：1) 确认已进入课程播放页，且左侧目录与顶部步骤标签已经渲染完成；2) 也可以手动点开「视频」步骤后再运行脚本；3) V1 已不再维护，建议改用 V3.4 的 v3_optimized.js。');
+    }
     // 等待几秒后执行视频存在性检查和其他操作
     setTimeout(() => {
         const frameObj = $("iframe").eq(0).contents().find("iframe.ans-insertvideo-online");
