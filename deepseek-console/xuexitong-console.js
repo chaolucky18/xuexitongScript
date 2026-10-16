@@ -301,7 +301,7 @@ response = await fetch(`${LOCAL_URL}/answer`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'X-Xuexitong-Token': LOCAL_TOKEN },
 body: JSON.stringify({ questions: payload }),
-signal: AbortSignal.timeout(260000),
+signal: AbortSignal.timeout(900000),
 });
 } catch (error) {
 throw new Error(`无法连接本地 DeepSeek 服务。请确认启动窗口仍在运行，且 Edge 允许本地网络访问。详情：${error.message}`);
@@ -589,6 +589,9 @@ return;
 this._guardLastResumeTs = now;
 const video = this._getVideoEl();
 if (!video || !this._isPlaying) return;
+video.muted = true;
+video.defaultMuted = true;
+video.volume = 0;
 console.log(`%c触发视频保活恢复(${reason})`, "color:#607D8B");
 video.play().catch((e) => {
 console.warn("直接恢复播放失败，尝试静音恢复:", e);
@@ -602,6 +605,9 @@ _checkVideoStatus() {
 try {
 const video = this._getVideoEl();
 if (!video) return;
+video.muted = true;
+video.defaultMuted = true;
+video.volume = 0;
 if (video.paused && this._isPlaying) {
 console.log("%c检测到视频暂停，尝试恢复播放...", "color:#FF5722");
 this._tryResumePlayback("paused");
@@ -679,6 +685,9 @@ return;
 this._isPlaying = true;
 this._videoEventHandle();
 try {
+el.muted = true;
+el.defaultMuted = true;
+el.volume = 0;
 await el.play();
 this._tryTimes = 0;
 console.log('%c视频开始播放，保持页面默认播放速度', 'color:#4CAF50');
@@ -898,6 +907,9 @@ for (const frame of $('iframe').toArray()) {
 const video = findVideo(frame, 0);
 if (video) {
 this._videoEl = video;
+video.muted = true;
+video.defaultMuted = true;
+video.volume = 0;
 break;
 }
 }
