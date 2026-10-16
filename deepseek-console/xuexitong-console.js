@@ -320,10 +320,13 @@ throw new Error('AI 答案格式错误');
 const q = questions[item.id - 1];
 if (!q) throw new Error('AI 返回未知题号');
 const letters = item.letters.map((letter) => clean(letter).toUpperCase());
-if (!letters.length || new Set(letters).size !== letters.length ||
-(q.kind !== '多选题' && letters.length !== 1) ||
-letters.some((letter) => !q.options.some((option) => option.letter === letter)))
-throw new Error(`第 ${item.id} 题答案无效，已停止提交`);
+if (!letters.length) throw new Error(`第 ${item.id} 题 AI 未给出选项，已停止提交`);
+if (new Set(letters).size !== letters.length) throw new Error(`第 ${item.id} 题答案包含重复选项，已停止提交`);
+if (q.kind !== '多选题' && letters.length !== 1)
+throw new Error(`第 ${item.id} 题是${q.kind}，但 AI 返回了 ${letters.length} 个选项，已停止提交`);
+const invalidLetters = letters.filter((letter) => !q.options.some((option) => option.letter === letter));
+if (invalidLetters.length)
+throw new Error(`第 ${item.id} 题 AI 返回了页面中不存在的选项：${invalidLetters.join('、')}，已停止提交`);
 result.set(item.id, letters);
 }
 return result;

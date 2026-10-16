@@ -13,7 +13,7 @@ export async function requestAnswers(questions, apiKey, fetchImpl = fetch) {
             response_format: { type: 'json_object' },
             ...settings,
             messages: [
-                { role: 'system', content: '按题意选择正确选项。只输出 JSON：{"answers":[{"id":1,"letters":["A"]}]}。单选和判断选一个，多选列全；无法判断时给空数组。' },
+                { role: 'system', content: '按题意回答全部题目。每题都必须给非空答案，只用该题提供的选项字母且不可重复；单选和判断选一个，多选列出所有正确项。不确定时选最可能的答案。id须对应题号。只输出JSON：{"answers":[{"id":1,"letters":["A"]}]}。' },
                 { role: 'user', content: JSON.stringify(questions) },
             ],
         };
