@@ -13,6 +13,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.local-configs.json
 package-lock.json
 pnpm-lock.yaml
 
