@@ -1,6 +1,6 @@
 const API_URL = 'https://api.deepseek.com/chat/completions';
 const ATTEMPTS = [
-    { thinking: { type: 'disabled' }, max_tokens: 5000 },
+    { thinking: { type: 'enabled' }, reasoning_effort: 'low', max_tokens: 5000 },
 ];
 
 export async function requestAnswers(questions, apiKey, fetchImpl = fetch) {
