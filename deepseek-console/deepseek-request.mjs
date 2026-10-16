@@ -1,6 +1,6 @@
 const API_URL = 'https://api.deepseek.com/chat/completions';
 const ATTEMPTS = [
-    { thinking: { type: 'disabled' }, max_tokens: 5000 },
+    { thinking: { type: 'enabled' }, reasoning_effort: 'low', max_tokens: 8000 },
 ];
 
 export async function requestAnswers(questions, apiKey, fetchImpl = fetch) {
@@ -12,7 +12,7 @@ export async function requestAnswers(questions, apiKey, fetchImpl = fetch) {
             response_format: { type: 'json_object' },
             ...settings,
             messages: [
-                { role: 'system', content: '按题意回答全部题目。每题都必须给非空答案，只用该题提供的选项字母且不可重复；单选和判断选一个，多选列出所有正确项。不确定时选最可能的答案。id须对应题号。只输出JSON：{"answers":[{"id":1,"letters":["A"]}]}。' },
+                { role: 'system', content: '按题意回答全部题目。注意：题干或选项可能经过网页防复制处理，出现个别汉字被替换、插入无关字，或词语看起来不通顺。先结合上下文和选项在内部还原最可能的原句，再按还原后的题意作答；不要把明显异常的替换字当作专业术语，也不要因无法逐字还原而放弃。每题都必须给非空答案，只用该题提供的选项字母且不可重复；单选和判断选一个，多选列出所有正确项。不确定时选最可能的答案。id须对应题号。只输出JSON：{"answers":[{"id":1,"letters":["A"]}]}。' },
                 { role: 'user', content: JSON.stringify(questions) },
             ],
         };

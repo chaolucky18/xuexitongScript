@@ -295,6 +295,7 @@ type: q.kind,
 question: q.title,
 options: q.options.map((o) => ({ letter: o.letter, text: o.text })),
 }));
+console.log('以下是本次发送给 DeepSeek 的题干和选项：', payload);
 let response;
 try {
 response = await fetch(`${LOCAL_URL}/answer`, {
