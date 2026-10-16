@@ -10,6 +10,11 @@
 
 这版的目标是保持原模板的行为方式，不再额外叠加复杂的后台保活、通知、测试按钮等附加层，尽量减少冲突。
 
+## DeepSeek 控制台练习版
+
+仓库新增了独立的 [DeepSeek 控制台版](deepseek-console/README.md)，通过本地服务调用 DeepSeek API，识别章节练习题并辅助作答。原有 V3 脚本入口保持不变。
+
+
 ## 文件说明
 
 - [v3_optimized.js](v3_optimized.js)
