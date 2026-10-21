@@ -38,7 +38,7 @@
 
 进入视频页后，脚本会：
 
-- 识别 iframe 内的真实视频元素
+- 识别 iframe 内的真实视频元素；目录先出现、视频组件稍后加载时，按 `retryInterval` / `maxRetries` 有限重试
 - 自动调用 `play()`
 - 如果播放被短暂中断，则尝试恢复播放
 - 如果普通播放失败，则尝试静音播放
@@ -85,6 +85,12 @@ configs: {
 ```javascript
 app.run()
 app.nextUnit()
+
+// 停止自动播放、延迟换节和页面监听，并暂停当前视频
+app.destroy()
+
+// 再次启动（重新识别当前章节并恢复监听）
+app.run()
 ```
 
 ### 方法二：Tampermonkey
@@ -98,9 +104,13 @@ app.nextUnit()
 
 ### 0. 无视频或课件页面
 
+课程目录和视频 iframe 可能先后加载。脚本会先等待组件，默认每 2 秒重试，最多 10 次；超过次数仍无法识别时按以下配置停止或换节。手动执行 `app.run()` 或进入新小节时会重置重试次数。
+
 默认不会自动跳过无法识别的无视频页面，避免在课件未完成时反复触发“当前章节还有任务未完成”的平台提示。控制台会给出明确日志；确认当前节点无需处理后，可手动执行 `app.nextUnit()`。
 
 如果课程结构已确认安全，才可在控制台将 `app.configs.autoAdvanceNoVideo = true`，让脚本自动切换无视频小节。
+
+停止后再启动时，会清理旧的延迟任务并重新绑定事件；停止前发起的播放请求随后成功或失败，都不会重新开启自动监控。在油猴中启用或禁用脚本后，需要刷新课程页使开关生效。
 
 ### 1. 为什么有时会看到 `AbortError`
 
@@ -148,6 +158,7 @@ The play() request was interrupted by a call to pause()
 ```bash
 node scripts/build-userscript.mjs
 node tests/verify-v3.mjs
+node tests/player-lifecycle.mjs
 ```
 
 第二条命令会验证两个入口的语法，并确认油猴脚本与唯一源码完全一致。

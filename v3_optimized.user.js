@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通自动刷课脚本 V3 稳定版
 // @namespace    local.codex.xuexitong
-// @version      3.3.0
+// @version      3.3.1
 // @description  自动播放、自动切换下一节，并在页面结构异常时安全停止
 // @author       Codex
 // @match        *://mooc1.chaoxing.com/mycourse/studentstudy*
@@ -71,6 +71,9 @@
             _videoEl: null,
             _treeContainerEl: null,
             _isPlaying: false,
+            _running: false,
+            _generation: 0,
+            _pendingTimers: new Set(),
             _currentRetryCount: 0,
             _checkInterval: null,
             _eventVideoEl: null,
@@ -87,7 +90,21 @@
             get cellData() {
                 return this._cellData;
             },
+            _schedule(task, delay) {
+                const generation = this._generation;
+                const timer = setTimeout(() => {
+                    this._pendingTimers.delete(timer);
+                    if (this._running && this._generation === generation) task();
+                }, delay);
+                this._pendingTimers.add(timer);
+                return timer;
+            },
             run() {
+                this.destroy();
+                this._running = true;
+                this._tryTimes = 0;
+                this._stepSwitchPending = false;
+                this._bindPageGuards();
                 console.log("%c=== 学习通自动刷课脚本 V3 优化版启动 ===", "color:#4CAF50;font-size:16px;font-weight:bold");
                 this._nextUnitPending = false;
                 this._chapterAdvanceTimes = 0;
@@ -100,6 +117,7 @@
                 this.play();
             },
             nextUnit() {
+                if (!this._running) return;
                 if (this._nextUnitPending) {
                     console.warn('%c已有小节切换正在进行，忽略重复请求', 'color:#FF9800');
                     return;
@@ -141,6 +159,7 @@
                 }
             },
             _startVideoMonitoring() {
+                if (!this._running) return;
                 this._clearCheckInterval();
                 this._guardLastTime = 0;
                 this._guardLastWallTs = 0;
@@ -150,6 +169,8 @@
                 }, this.configs.videoCheckInterval);
             },
             _tryResumePlayback(reason) {
+                const generation = this._generation;
+                if (!this._running) return;
                 const now = Date.now();
                 if (now - this._guardLastResumeTs < this.configs.guardResumeCooldownMs) {
                     return;
@@ -161,6 +182,7 @@
 
                 console.log(`%c触发视频保活恢复(${reason})`, "color:#607D8B");
                 video.play().catch((e) => {
+                    if (!this._running || generation !== this._generation) return;
                     console.warn("直接恢复播放失败，尝试静音恢复:", e);
                     video.muted = true;
                     video.play().catch((err) => {
@@ -169,6 +191,7 @@
                 });
             },
             _checkVideoStatus() {
+                if (!this._running) return;
                 try {
                     const video = this._getVideoEl();
                     if (!video) return;
@@ -199,7 +222,7 @@
                     if (video.ended && this._isPlaying) {
                         console.log("%c检测到视频结束，准备切换下一个...", "color:#9C27B0");
                         this._isPlaying = false;
-                        setTimeout(() => this.nextUnit(), 1000);
+                        this._schedule(() => this.nextUnit(), 1000);
                     }
                 } catch (e) {
                     console.error("视频状态检查失败:", e);
@@ -214,6 +237,8 @@
             _guardLastWallTs: 0,
             _guardLastResumeTs: 0,
             async play() {
+                const generation = this._generation;
+                if (!this._running) return;
                 try {
                     const el = this._getVideoEl();
                     if (el == null) {
@@ -222,7 +247,7 @@
                         }
                         if (this._advanceLearningStep()) {
                             console.log("%c当前不在视频页，已尝试切到下一学习步骤，2秒后重试", "color:#607D8B");
-                            setTimeout(() => {
+                            this._schedule(() => {
                                 this.play();
                             }, 2000);
                             return;
@@ -230,6 +255,10 @@
                         if (this._isChapterTest()) {
                             this._advanceChapterTest();
                             return;
+                        }
+                        // The directory may render before the video iframe or step tabs.
+                        if (this._tryTimes < this.configs.maxRetries) {
+                            throw new Error('等待视频组件或学习步骤加载');
                         }
                         this._isPlaying = false;
                         this._clearCheckInterval();
@@ -248,14 +277,17 @@
 
                     try {
                         await el.play();
+                        if (!this._running || generation !== this._generation) return;
                         this._tryTimes = 0;
                         console.log(`%c视频开始播放，倍速: ${el.playbackRate}x`, "color:#4CAF50");
                         this._startVideoMonitoring();
                     } catch (playError) {
+                        if (!this._running || generation !== this._generation) return;
                         console.error("视频播放失败:", playError);
                         this._handlePlayError(playError);
                     }
                 } catch (e) {
+                    if (!this._running || generation !== this._generation) return;
                     if (this._tryTimes >= this.configs.maxRetries) {
                         console.error("%c视频播放失败，已达到最大重试次数", "color:#F44336;font-weight:bold", e);
                         this._clearCheckInterval();
@@ -263,7 +295,7 @@
                     }
                     this._tryTimes++;
                     console.log(`%c播放失败，${this.configs.retryInterval/1000}秒后重试 (${this._tryTimes}/${this.configs.maxRetries})`, "color:#FF9800");
-                    setTimeout(() => {
+                    this._schedule(() => {
                         this.play();
                     }, this.configs.retryInterval);
                 }
@@ -321,7 +353,7 @@
                 this._chapterAdvanceTimes++;
                 console.log('%c检测到章节测验，尝试进入下一学习步骤', 'color:#607D8B');
                 nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                setTimeout(() => this.play(), 2000);
+                this._schedule(() => this.play(), 2000);
             },
             _bindStepNavigation() {
                 if (this._stepNavigationBound) {
@@ -334,7 +366,7 @@
                     this._isPlaying = false;
                     this._stepSwitchPending = true;
                     this._stepSwitchAt = Date.now();
-                    setTimeout(() => {
+                    this._schedule(() => {
                         try {
                             this._initCellData();
                         } catch (e) {}
@@ -351,11 +383,14 @@
                 });
             },
             _handlePlayError(error) {
+                const generation = this._generation;
+                if (!this._running) return;
                 console.error("播放错误详情:", error);
                 const video = this._getVideoEl();
                 if (video) {
                     video.muted = true;
                     video.play().then(() => {
+                        if (!this._running || generation !== this._generation) return;
                         console.log("%c静音播放成功", "color:#4CAF50");
                         this._tryTimes = 0;
                         this._startVideoMonitoring();
@@ -364,6 +399,7 @@
                             this._delayedNextUnitTimer = null;
                         }
                     }).catch(e => {
+                        if (!this._running || generation !== this._generation) return;
                         console.error("静音播放也失败:", e);
                         if (this._delayedNextUnitTimer) {
                             clearTimeout(this._delayedNextUnitTimer);
@@ -374,7 +410,7 @@
                             return;
                         }
                         this._tryTimes++;
-                        this._delayedNextUnitTimer = setTimeout(() => {
+                        this._delayedNextUnitTimer = this._schedule(() => {
                             this._delayedNextUnitTimer = null;
                             this.play();
                         }, this.configs.retryInterval);
@@ -382,6 +418,8 @@
                 }
             },
             playCurrentIndex(nCell) {
+                if (!this._running) return;
+                this._tryTimes = 0;
                 this._nextUnitPending = false;
                 if (!nCell) {
                     const el = this._getTreeContainer();
@@ -403,7 +441,7 @@
                 this._isPlaying = false;
 
                 console.log("%c等待视频加载...", "color:#FF9800");
-                setTimeout(() => {
+                this._schedule(() => {
                     this._initCellData();
                     if (this.configs.autoplay) {
                         this.play();
@@ -522,7 +560,7 @@
                 console.warn(`%c============'${title}' 播放完成=============`, "color:#4CAF50;font-weight:bold");
                 this._isPlaying = false;
                 this._clearCheckInterval();
-                setTimeout(() => this.nextUnit(), 1000);
+                this._schedule(() => this.nextUnit(), 1000);
             },
             _handleVideoLoaded(e) {
                 console.log(`%c============视频加载完成=============`, "color:#2196F3");
@@ -547,6 +585,7 @@
                 console.log(`%c============视频暂停=============`, "color:#FF9800");
             },
             _bindPageGuards() {
+                if (this._pageGuards) return;
                 const preventPause = (e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -561,10 +600,17 @@
                 document.addEventListener('visibilitychange', resumePlaybackNow);
             },
             destroy() {
+                this._running = false;
+                this._generation++;
+                for (const timer of this._pendingTimers) clearTimeout(timer);
+                this._pendingTimers.clear();
+                this._delayedNextUnitTimer = null;
+                this._stepNavigationBound = false;
                 this._isPlaying = false;
                 this._clearCheckInterval();
+                const videos = new Set([this._videoEl, this._eventVideoEl]);
                 this._detachVideoEvents();
-                if (this._delayedNextUnitTimer) clearTimeout(this._delayedNextUnitTimer);
+                for (const video of videos) video?.pause();
                 $(document).off('.xuexitongPlayerV3');
                 if (this._pageGuards) {
                     const { preventPause, resumePlaybackNow } = this._pageGuards;
@@ -584,7 +630,6 @@
 
         try {
             app.run();
-            app._bindPageGuards();
         } catch (error) {
             console.error("%c脚本运行失败: ", "color:#F44336;font-weight:bold", error.message);
             console.log("请检查是否在正确的课程播放页面，或者页面结构是否再次发生改变。");
