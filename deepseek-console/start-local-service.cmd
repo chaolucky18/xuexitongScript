@@ -23,18 +23,28 @@ if not exist "xuexitong-console.js" (
   echo Keep this launcher, deepseek-local.mjs and xuexitong-console.js together.
   goto :failed
 )
-
-set "NODE_EXE=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
-if not exist "%NODE_EXE%" (
-  set "NODE_EXE="
-  for /f "delims=" %%I in ('where node.exe 2^>nul') do if not defined NODE_EXE set "NODE_EXE=%%I"
+if not exist "tools\win-ocr.ps1" (
+  echo Missing tools\win-ocr.ps1.
+  echo The OCR helper is required to decode the obfuscated question text.
+  goto :failed
 )
+
+set "NODE_EXE="
+for /f "delims=" %%I in ('where node.exe 2^>nul') do if not defined NODE_EXE set "NODE_EXE=%%I"
 if not defined NODE_EXE (
-  echo Node.js was not found. Install Node.js and try again.
+  echo Node.js was not found. Install Node.js 18 or newer and try again.
   goto :failed
 )
 
 echo Starting DeepSeek local service...
+echo.
+if defined DEEPSEEK_API_KEY (
+  echo API Key: using the DEEPSEEK_API_KEY environment variable.
+) else (
+  echo API Key: not set. You will be asked to paste it below.
+  echo Tip: run  setx DEEPSEEK_API_KEY sk-your-key  once, then this step is skipped forever.
+  echo.
+)
 "%NODE_EXE%" "deepseek-local.mjs"
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.

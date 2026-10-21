@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="popup.css">
+    <title>学习通助手</title>
+</head>
+<body>
+    <header>
+        <span class="brand">学习通助手</span>
+        <span id="status" class="status" data-kind="idle">正在检测…</span>
+    </header>
+
+    <main>
+        <label class="field">
+            <span class="label">本地服务令牌</span>
+            <input id="token" type="password" spellcheck="false" autocomplete="off" placeholder="启动窗口里打印的那串 48 位字符">
+        </label>
+
+        <label class="field">
+            <span class="label">本地服务地址</span>
+            <input id="endpoint" type="text" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:37841">
+        </label>
+
+        <div class="row">
+            <button id="save" class="primary">保存</button>
+            <button id="test" class="ghost">测试连接</button>
+            <button id="toggle" class="ghost">显示</button>
+        </div>
+
+        <p id="message" class="message" data-kind=""></p>
+
+        <ol class="steps">
+            <li>双击 <code>启动 DeepSeek 本地服务.cmd</code>，粘贴 API Key（或用 <code>DEEPSEEK_API_KEY</code> 环境变量跳过）。</li>
+            <li>启动窗口会把令牌复制到剪贴板，在这里 Ctrl+V 粘上并保存。只需做一次。</li>
+            <li>打开学习通课程播放页，脚本自动开始工作，整页跳转后也会自己接上。</li>
+        </ol>
+
+        <p class="hint">页面左上角出现红色报错时，按 F12 打开控制台查看原因。刷新课程页可随时停止。</p>
+    </main>
+
+    <script src="popup.js"></script>
+</body>
+</html>
