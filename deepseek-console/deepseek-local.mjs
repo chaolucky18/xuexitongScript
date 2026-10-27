@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { requestAnswers } from './deepseek-request.mjs';
+import { decodeTexts, probeDecoder } from './font-bridge/font-bridge.mjs';
 
 const PORT = 37841;
 const scriptPath = fileURLToPath(new URL('./xuexitong-console.js', import.meta.url));
@@ -46,7 +47,7 @@ async function readApiKey() {
     });
 }
 
-const apiKey = await readApiKey();
+const apiKey = (process.env.DEEPSEEK_API_KEY || '').trim() || await readApiKey();
 if (!apiKey) throw new Error('未输入 DeepSeek API Key');
 const script = readFileSync(scriptPath, 'utf8');
 if (!/const LOCAL_TOKEN = '[^']*';/.test(script)) throw new Error('控制台脚本缺少本地令牌位置');
@@ -61,6 +62,23 @@ function send(res, status, data, origin) {
     res.end(JSON.stringify(data));
 }
 
+async function readJson(req, limit) {
+    let raw = '';
+    for await (const chunk of req) {
+        raw += chunk.toString('utf8');
+        if (raw.length > limit) throw new Error('请求内容过大');
+    }
+    return JSON.parse(raw);
+}
+
+function validDecodeRequest(body) {
+    const font = body?.font;
+    const texts = body?.texts;
+    return typeof font === 'string' && font.length > 100 && font.length <= 6000000 &&
+        Array.isArray(texts) && texts.length >= 1 && texts.length <= 300 &&
+        texts.every((text) => typeof text === 'string' && text.length <= 5000);
+}
+
 function validQuestions(questions) {
     if (!Array.isArray(questions) || questions.length < 1 || questions.length > 30) return false;
     return questions.every((q, i) => Number.isInteger(q.id) && q.id === i + 1 &&
@@ -72,6 +90,8 @@ function validQuestions(questions) {
 }
 
 let busy = false;
+let decoding = false;
+let decoderProbe = null;
 const server = createServer(async (req, res) => {
     const origin = req.headers.origin;
     if (!allowedOrigin(origin)) {
@@ -96,7 +116,34 @@ const server = createServer(async (req, res) => {
         return;
     }
     if (req.method === 'GET' && req.url === '/health') {
-        send(res, 200, { ok: true }, origin);
+        send(res, 200, {
+            ok: true,
+            decoder: decoderProbe ? decoderProbe.ok : null,
+            python: decoderProbe ? decoderProbe.python || null : null,
+            error: decoderProbe && !decoderProbe.ok ? decoderProbe.error : undefined,
+        }, origin);
+        return;
+    }
+    if (req.method === 'POST' && req.url === '/decode') {
+        if (!String(req.headers['content-type'] || '').startsWith('application/json')) {
+            send(res, 415, { error: '仅接受 JSON' }, origin);
+            return;
+        }
+        if (decoding) {
+            send(res, 429, { error: '上一批字形仍在还原' }, origin);
+            return;
+        }
+        decoding = true;
+        try {
+            const body = await readJson(req, 8000000);
+            if (!validDecodeRequest(body)) throw new Error('字体或文本格式不正确');
+            const result = await decodeTexts({ fontBase64: body.font, texts: body.texts });
+            send(res, 200, result, origin);
+        } catch (error) {
+            send(res, 502, { error: error.message }, origin);
+        } finally {
+            decoding = false;
+        }
         return;
     }
     if (req.method !== 'POST' || req.url !== '/answer') {
@@ -129,9 +176,14 @@ const server = createServer(async (req, res) => {
     }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, '127.0.0.1', async () => {
     writeFileSync(scriptPath, script.replace(/const LOCAL_TOKEN = '[^']*';/, `const LOCAL_TOKEN = '${token}';`), 'utf8');
     console.log(`本地服务已启动：http://127.0.0.1:${PORT}`);
+    const probe = await probeDecoder().catch((error) => ({ ok: false, error: error.message }));
+    decoderProbe = probe;
+    console.log(probe.ok
+        ? `字形还原已就绪：${probe.python}`
+        : `字形还原不可用：${probe.error}`);
     console.log('请复制同目录 xuexitong-console.js 的全部内容，粘贴到学习通页面的 Edge 控制台并按 Enter。');
     console.log('关闭本窗口即可停止服务；API Key 不会写入文件。');
 });

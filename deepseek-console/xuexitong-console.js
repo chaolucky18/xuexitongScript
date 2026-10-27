@@ -12,6 +12,8 @@ if (!/^https:\/\/([a-z0-9-]+\.)*chaoxing\.com$/i.test(location.origin) ||
 console.error('请在学习通课程播放页的控制台执行本脚本');
 return;
 }
+const SCRIPT_VERSION = '2026-10-27 字形还原 v3（外链字体 + 诊断）';
+console.log(`[学习通助手] 脚本版本 ${SCRIPT_VERSION}`);
 if (LOCAL_TOKEN === '__LOCAL_TOKEN__') {
 console.error('请先启动 DeepSeek 本地服务，再复制更新后的 xuexitong-console.js');
 return;
@@ -37,6 +39,11 @@ headers: { 'X-Xuexitong-Token': LOCAL_TOKEN },
 signal: AbortSignal.timeout(5000),
 }).then((response) => {
 if (!response.ok) throw new Error(`HTTP ${response.status}`);
+response.json().then((info) => {
+if (info && info.decoder === false) {
+console.warn('本地服务报告字形还原不可用：', info.error || '未检测到可用的 Python 环境');
+}
+}).catch(() => {});
 console.log('DeepSeek 本地服务已连接');
 if (typeof PAGE.jQuery === 'undefined') {
 const script = document.createElement('script');
@@ -117,6 +124,7 @@ function attachQuizAutomation(app) {
 const attemptedQuizzes = new Set();
 let quizBusy = false;
 let stopped = false;
+let lastDecodedQuiz = null;
 const originalDestroy = app.destroy.bind(app);
 app.destroy = function () {
 stopped = true;
@@ -288,6 +296,203 @@ await sleep(500);
 throw new Error('测验框架已打开，但等待 120 秒仍未识别完整题目。可运行 app.inspectQuiz() 查看当前识别结果');
 }
 
+const FONT_FACE_RE = /@font-face\s*\{[^}]*\}/gi;
+const CXSECRET_RE = /cxsecret/i;
+const DATA_BASE64_RE = /base64,([A-Za-z0-9+/=\s]+)/;
+const SRC_URL_RE = /url\(\s*['"]?([^'")]+)['"]?\s*\)/i;
+
+function collectCssTexts(doc) {
+const texts = [];
+for (const style of doc.querySelectorAll('style')) texts.push(style.textContent || '');
+try {
+for (const sheet of doc.styleSheets) {
+try {
+for (const rule of sheet.cssRules) texts.push(rule.cssText || '');
+} catch (_) { /* 跨域样式表读不到 */ }
+}
+} catch (_) { /* 没有 styleSheets */ }
+return texts;
+}
+
+function parseFontFace(block) {
+if (!CXSECRET_RE.test(block)) return null;
+const familyMatch = block.match(/font-family\s*:\s*([^;}]+)/i);
+const family = (familyMatch ? familyMatch[1] : '').trim().replace(/^['"]|['"]$/g, '');
+const data = block.match(DATA_BASE64_RE);
+if (data) return { kind: 'inline', value: data[1].replace(/\s+/g, ''), family };
+const src = block.match(SRC_URL_RE);
+if (src && !/^data:/i.test(src[1])) return { kind: 'url', value: src[1].trim(), family };
+return null;
+}
+
+function fontFromCssText(cssText) {
+if (!CXSECRET_RE.test(cssText)) return null;
+const blocks = cssText.match(FONT_FACE_RE) || [];
+for (const block of blocks) {
+const font = parseFontFace(block);
+if (font) return font;
+}
+return null;
+}
+
+function findObfuscatedFont(questions) {
+const docs = courseDocuments();
+const preferred = questions && questions[0] && questions[0].doc;
+const ordered = [];
+if (preferred && docs.includes(preferred)) ordered.push(preferred);
+for (const doc of docs) if (!ordered.includes(doc)) ordered.push(doc);
+for (const doc of ordered) {
+for (const cssText of collectCssTexts(doc)) {
+const font = fontFromCssText(cssText);
+if (font) return { font, doc };
+}
+}
+return null;
+}
+
+function fontSourceLabel(doc) {
+try {
+if (doc === document) return '主页面';
+const path = (doc.location && doc.location.pathname) || '';
+return path ? `题目框架 ${path.slice(0, 60)}` : '内嵌框架';
+} catch (_) {
+return '未知框架';
+}
+}
+
+function arrayBufferToBase64(buffer) {
+const bytes = new Uint8Array(buffer);
+let binary = '';
+for (let i = 0; i < bytes.length; i += 0x8000) {
+binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+}
+return btoa(binary);
+}
+
+async function loadFontBase64(font, doc) {
+if (font.kind === 'inline') return font.value;
+const base = (doc && doc.baseURI) || location.href;
+const url = new URL(font.value, base).href;
+console.log(`字体来自外链，正在下载：${url}`);
+const response = await fetch(url, { credentials: 'include' });
+if (!response.ok) throw new Error(`下载字体失败：HTTP ${response.status}`);
+return arrayBufferToBase64(await response.arrayBuffer());
+}
+
+function collectFontFaceInfo() {
+const rows = [];
+for (const doc of courseDocuments()) {
+const label = fontSourceLabel(doc);
+for (const cssText of collectCssTexts(doc)) {
+const blocks = cssText.match(FONT_FACE_RE) || [];
+for (const block of blocks) {
+const family = ((block.match(/font-family\s*:\s*([^;}]+)/i) || [])[1] || '').trim();
+const isInline = DATA_BASE64_RE.test(block);
+const src = (block.match(SRC_URL_RE) || [])[1] || '';
+rows.push({
+框架: label,
+字体名: family.slice(0, 40),
+来源: isInline ? '内联 base64' : (src ? src.slice(0, 70) : '无'),
+});
+}
+}
+}
+return rows;
+}
+
+function collectFontResources() {
+try {
+return performance.getEntriesByType('resource')
+.map((entry) => entry.name)
+.filter((name) => /\.(woff2?|ttf|otf)(\?|#|$)/i.test(name));
+} catch (_) {
+return [];
+}
+}
+
+async function decodeObfuscated(questions) {
+const found = findObfuscatedFont(questions);
+if (!found) {
+console.warn('没有在当前页面找到 font-cxsecret 字体，题目按页面原始文字作答');
+const faces = collectFontFaceInfo();
+if (faces.length) {
+console.log('页面里检测到的 @font-face（可能字体名不是 cxsecret，或来源跨域读不到）：');
+console.table(faces);
+} else {
+console.log('页面里没有读到任何 @font-face 规则（可能样式表跨域）');
+}
+const resources = collectFontResources();
+if (resources.length) console.log('页面已加载的字体文件：', resources);
+console.log('可运行 app.diagnoseFont() 复核。若控制台文字与屏幕文字一致，说明这页没有做字形混淆，本来就不用还原');
+return false;
+}
+const font = await loadFontBase64(found.font, found.doc);
+console.log(`使用 cxsecret 字体：${font.length} 字符（${found.font.kind === 'inline' ? '内联 base64' : '外链'}，来源 ${fontSourceLabel(found.doc)}，字体名 ${found.font.family || '未知'}）`);
+const entries = [];
+questions.forEach((q, qIndex) => {
+entries.push({
+label: `第 ${qIndex + 1} 题题干`,
+get: () => q.title,
+set: (value) => { q.title = value; },
+});
+q.options.forEach((option) => entries.push({
+label: `第 ${qIndex + 1} 题 ${option.letter} 选项`,
+get: () => option.text,
+set: (value) => { option.text = value; },
+}));
+});
+const texts = entries.map((entry) => entry.get());
+console.log(`检测到 font-cxsecret 字形混淆，正在本地还原 ${texts.length} 段文字（首次约 5–10 秒）...`);
+const response = await fetch(`${LOCAL_URL}/decode`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'X-Xuexitong-Token': LOCAL_TOKEN },
+body: JSON.stringify({ font, texts }),
+signal: AbortSignal.timeout(180000),
+});
+const data = await response.json().catch(() => null);
+if (!response.ok) throw new Error(data?.error || `本地服务返回 HTTP ${response.status}`);
+if (!data || !Array.isArray(data.texts) || data.texts.length !== texts.length)
+throw new Error('字形还原结果条数与输入不一致');
+data.texts.forEach((text, index) => entries[index].set(text));
+const changes = data.texts
+.map((text, index) => ({ index, raw: texts[index], decoded: text }))
+.filter((item) => item.raw !== item.decoded);
+if (!data.codes)
+console.warn('注意：这批文字里没有任何字符命中该字体的 cmap。可能取到的字体不是本题的，或这一页本来就没有做字形混淆');
+else if (!changes.length)
+console.warn(`识别到 ${data.codes} 个槽位，但还原结果与原文完全一致，请确认字体是否匹配`);
+lastDecodedQuiz = questions.map((q, i) => ({
+id: i + 1, type: q.kind, question: q.title,
+options: q.options.map((o) => `${o.letter}. ${o.text}`),
+}));
+printDecodedQuiz(questions, changes, entries, data);
+return true;
+}
+
+function printDecodedQuiz(questions, changes, entries, data) {
+console.group(`字形还原结果：${questions.length} 题 / ${changes.length} 段改写 / ${data.codes} 个槽位 / ${data.seconds} 秒${data.cached ? '（缓存命中）' : ''}（请核对）`);
+questions.forEach((q, i) => {
+const lines = [`${i + 1}. 【${q.kind}】${q.title}`];
+q.options.forEach((o) => lines.push(`    ${o.letter}. ${o.text}`));
+console.log(lines.join('\n'));
+});
+if (changes.length) {
+console.groupCollapsed(`展开对比 ${changes.length} 段被改写的原文（乱码 → 真字）`);
+changes.forEach(({ index, raw, decoded }) => {
+console.log(`${entries[index].label}：${raw}  →  ${decoded}`);
+});
+console.groupEnd();
+}
+const suspect = Object.entries(data.uncertain || {});
+if (suspect.length) {
+console.warn(`有 ${suspect.length} 个字各字库判断不一致，提交前重点核对：`);
+suspect.slice(0, 20).forEach(([ch, candidates]) => {
+console.log(`    ${ch} 可能是：${candidates.join(' / ')}`);
+});
+}
+console.groupEnd();
+}
+
 async function askDeepSeek(questions) {
 const payload = questions.map((q, i) => ({
 id: i + 1,
@@ -452,6 +657,48 @@ options: q.options.map((o) => `${o.letter}. ${o.text}`),
 }));
 };
 
+app.inspectDecoded = function () {
+return lastDecodedQuiz;
+};
+
+app.diagnoseFont = function () {
+const rows = courseDocuments().map((doc, index) => {
+let fontInfo = null;
+let styleCount = 0;
+let marked = false;
+let path = '';
+try { styleCount = doc.querySelectorAll('style').length; } catch (_) { /* ignore */ }
+try { marked = Boolean(doc.querySelector('.font-cxsecret, .fontLabel')); } catch (_) { /* ignore */ }
+try { path = (doc.location && doc.location.pathname) || ''; } catch (_) { /* ignore */ }
+for (const cssText of collectCssTexts(doc)) {
+fontInfo = fontFromCssText(cssText);
+if (fontInfo) break;
+}
+return {
+框架: index === 0 ? '主页面' : `iframe ${index}`,
+地址: path,
+混淆标记: marked ? '有' : '无',
+style标签: styleCount,
+cxsecret字体: fontInfo
+? (fontInfo.kind === 'inline' ? `内联 ${fontInfo.value.length} 字符` : `外链 ${fontInfo.value}`)
+: '无',
+};
+});
+console.table(rows);
+const faces = collectFontFaceInfo();
+if (faces.length) {
+console.log('页面里的 @font-face：');
+console.table(faces);
+}
+const resources = collectFontResources();
+if (resources.length) console.log('已加载的字体文件：', resources);
+const found = findObfuscatedFont([]);
+console.log(found
+? `字形还原可用：${found.font.kind === 'inline' ? '内联' : '外链'}字体（${found.font.family || '未知字体名'}），来源 ${fontSourceLabel(found.doc)}`
+: '没有找到 cxsecret 字体：题目会按原始文字作答');
+return rows;
+};
+
 app._advanceChapterTest = function () {
 if (stopped || quizBusy) return;
 quizBusy = true;
@@ -474,6 +721,11 @@ if (docs.size !== 1) throw new Error('题目跨多个框架，已停止自动提
 const countText = clean(questions[0].doc.body.innerText).match(/题量\s*[:：]\s*(\d+)/);
 if (countText && Number(countText[1]) !== questions.length)
 throw new Error(`页面显示 ${countText[1]} 道题，脚本只识别 ${questions.length} 道，已停止提交`);
+try {
+await decodeObfuscated(questions);
+} catch (error) {
+console.warn('字形还原未完成，按页面原始文字作答（DeepSeek 只能按上下文猜字）：', error.message);
+}
 const signature = questions.map((q) => `${q.kind}:${q.title}`).join('|');
 if (attemptedQuizzes.has(signature)) throw new Error('本次测验已尝试过，已停止重复提交');
 console.log(`识别到 ${questions.length} 道题，正在调用 DeepSeek`);
