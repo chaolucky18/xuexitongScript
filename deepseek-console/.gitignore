@@ -1,0 +1,9 @@
+# 本地运行产物（不要提交）
+.venv/
+__pycache__/
+*.pyc
+*.log
+.backup/
+questions.json
+
+.tmp/
