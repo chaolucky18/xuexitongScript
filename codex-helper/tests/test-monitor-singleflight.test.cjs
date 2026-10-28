@@ -1,0 +1,4 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const s=fs.readFileSync(require('node:path').join(__dirname,'../codex-helper.template.user.js'),'utf8');const code=s.slice(s.indexOf('function monitorTick(){'),s.indexOf('async function monitorTickOnce('));
+let resolve,calls=0;const context=vm.createContext({monitorPending:null,monitorGeneration:0,monitorTickOnce:()=>{calls++;return new Promise(r=>resolve=r)}});vm.runInContext(code,context);
+(async()=>{const a=context.monitorTick(),b=context.monitorTick();assert.equal(a,b);assert.equal(calls,1);resolve();await a;assert.equal(context.monitorPending,null);const c=context.monitorTick();assert.equal(calls,2);resolve();await c;console.log('PASS: pending monitor ticks coalesce and unlock after completion');})().catch(e=>{console.error(e);process.exitCode=1});

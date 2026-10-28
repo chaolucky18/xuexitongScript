@@ -15,6 +15,10 @@
 仓库新增了独立的 [DeepSeek 控制台版](deepseek-console/README.md)，通过本地服务调用 DeepSeek API，识别章节练习题并辅助作答。原有 V3 脚本入口保持不变。
 
 
+## Codex 油猴章节练习版
+
+新增独立的 [Codex 油猴版](codex-helper/README.md)，通过本机已登录的 Codex CLI 处理视频后的章节练习。它支持按页面实际字体生成题目图片，核对选项并提交，确认实际成绩后继续下一节；保留原有 V3 与 DeepSeek 入口。使用前请阅读安装、运行范围和停止说明。
+
 ## 文件说明
 
 - [v3_optimized.js](v3_optimized.js)

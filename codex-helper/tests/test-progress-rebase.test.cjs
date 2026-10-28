@@ -1,0 +1,12 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../codex-helper.template.user.js'),'utf8');
+const code=source.slice(source.indexOf('function trackPlaybackProgress('),source.indexOf('function notifyUser('));
+let now=1000;
+const api=vm.runInNewContext(`(()=>{let lastIdentity='',lastTime=null,lastProgress=0;${code};return {tick:trackPlaybackProgress,state:()=>({lastTime,lastProgress})}})()`,{Date:{now:()=>now}});
+api.tick('chapter',500);now=2000;api.tick('chapter',0);
+assert.equal(api.state().lastProgress,1000,'Backward reset alone is not playback progress');
+now=3000;api.tick('chapter',1);assert.equal(api.state().lastProgress,3000,'Forward progress below old baseline must count');
+now=100000;api.tick('chapter',1);assert.equal(api.state().lastProgress,3000,'Frozen playback must retain stall age');
+api.tick('chapter',null);assert.equal(api.state().lastProgress,3000,'Missing player is not progress');
+api.tick('next',0);assert.equal(api.state().lastProgress,100000,'New chapter receives a fresh progress baseline');
+console.log('PASS: reload rebasing, frozen and absent players, chapter transition');

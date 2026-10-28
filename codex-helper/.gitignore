@@ -1,0 +1,8 @@
+bridge-settings.json
+codex-helper.user.js
+bridge-process.json
+bridge-events.jsonl
+last-codex-error.txt
+*.log
+watchdog-stop
+watchdog-status.json
