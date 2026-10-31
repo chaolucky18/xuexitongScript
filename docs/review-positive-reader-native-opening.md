@@ -385,3 +385,246 @@ Executed browser groups: 29-case composition/recognition/planning/manual-recheck
 Obsolete tests asserting BLOCKED for safe recognition-only owners now expect WAITING_MANUAL_TASKS; mixed recognized+known cases allow the approved known execution or bounded loading states, retaining no-navigation/no-count assertions. No expectation was removed to accept unsafe navigation. Full historical navigation-v3.mjs and preserved-v3.mjs suites were not executed: some legacy fixtures rely on old global-block behavior or frozen-time pixel-reader timing. The selected runs and deterministic reader tests are the actual evidence; the complete requested safety matrix is not claimed exhaustively certified. Genuine cross-origin active frames, all storage readback/retention attack variants and authenticated browser compatibility remain unverified. Overall STATUS PARTIAL, with no current failure in the executed post-fix checks.
 
 Usage: expand 学习设置 → 任务记录与诊断. Review local vs platform credit separately. Copy sanitized JSON for diagnosis. Clear removes history only. After manual handling, click 重新核对当前小节; normal existing credit/identity/navigation checks decide whether continuation is permitted. Missing credit remains manual waiting. Never interpret exported history as evidence that a lesson was credited.
+
+
+### Final D1/D2/D3 attempt — lesson-level blocking diagnostics (2026-10-31)
+
+Baseline `5ee97211889c93c402047eefac3bef90d40fb0e2`. Overall STATUS FAIL: diagnostic correction implemented, complete synthetic acceptance not achieved.
+
+_block now emits GLOBAL_BLOCKED without a partial session using opaque references, fixed unsafe-scope reason, evidence none and explicit `{kind:"lesson", ordinal:null}`. It never persists the raw block message or pretends an attachment identity is verified. Repeated blocks use existing deduplication/caps. Current block appears separately in report.currentBlock and the summary; stored events remain historical only. Failed storage cannot prevent blocking. No execution or credit decision changed.
+
+Four actual-app tests pass for unowned content, inaccessible frames, password controls and failed diagnostic storage; they drive existing bounded readiness retries to the real terminal block. Exports exclude injected secret and URL text.
+
+Historical fixture repairs: customization supplies missing browser storage/URL/lifecycle APIs, explicitly resets its controlled manual retry and tests terminal play reentry as PAUSED rather than silently bypassing it. Optional bridge tests explicitly select/reselect the separate companion adapter rather than assume the native GM path does so. WAITING_LIVE and fail-closed assertions remain. Navigation fixtures use a storage-capable HTTPS origin; named fixture initialization helpers explicitly resume their controlled retry, without changing actual automatic/recovery test assertions. No cases were deleted or filtered in the following complete-file executions.
+
+| Complete command | Final observed outcome |
+| --- | --- |
+| `node tests/preserved-v3.mjs` | exit 1; FAIL at first assertion |
+| `node tests/verify-v3.mjs` | exit 0; PASS |
+| `node tests/customization-v3.mjs` | exit 0; PASS |
+| `node tests/task-pacing-v3.mjs` | exit 0; RESULT: 6 focused synthetic pacing groups passed; not authenticated browser acceptance. |
+| `node tests/bridge-v3.mjs` | exit 0; RESULT: 31 passed, 0 failed; mocked GM storage across openerless Chrome pages; one local WAV natural-ended case; no Tampermonkey or authenticated platform. |
+| `node tests/gm-live-v3.mjs` | exit 0; RESULT: 10 focused GM lifecycle checks passed; mocked GM/tabs, not Tampermonkey acceptance. |
+| `node tests/native-entry-v3.mjs` | exit 1; RESULT: 2 passed; 17 failed. Synthetic entry/manual-fallback evidence only. |
+| `node tests/recorded-live-v3.mjs` | exit 0; RESULT: 21 passed; 0 failed. Synthetic browser evidence only. |
+| `node tests/navigation-v3.mjs` | exit 1; RESULT: 387 passed, 148 failed; local Chrome DOM tests, simulated media/timers, no live platform. |
+
+Final navigation: 535 cases, 387 passed / 148 failed (before environment repair: 109/426). Native-entry: 2 passed / 17 failed. Preserved aborts at its first assertion. Task-pacing has six core groups plus six reader/recovery/journal groups. Other counts are shown above. No unresolved suite is labeled PASS.
+
+Failure triage: preserved is a historical whole-source projection mismatch against b880e877 after reviewed runtime changes; checks were NOT blanket-disabled. Native-entry retains old manual-only/no-native-click/BLOCKED expectations, but its 17 failed assertions have not all been independently re-proven or repaired. Navigation's 148 failures include old delay/reader/terminal-state contracts, null-player/callback fixture failures and ownership/credit assertions whose causes remain unestablished. They must NOT all be called harmless obsolete tests. Exact unresolved test names follow. The task is incomplete until these failures are resolved.
+
+Final logs stay local: `D:\Ddoc\ChatGPT\学习通\work\acceptance-last\` for non-navigation suites, `D:\Ddoc\ChatGPT\学习通\work\navigation-storage-origin.log` for the last complete navigation run, and `results-final.json` for consolidated outcomes. Superseded timeout runs were interrupted and do not count as completed final results; repaired bridge file subsequently completed all 31 cases. No logs were uploaded.
+
+D1 matrix (focused synthetic observations, NOT complete certification):
+
+| # | Scenario | Evidence/status |
+| --- | --- | --- |
+| 1 | Unknown beginning/middle/end | Composition cases pass |
+| 2 | Multiple unknowns | Composition passes |
+| 3 | Recognized manual type | Recognition and Flash handoff pass; book handoff not certified |
+| 4 | All-known compositions | Ordered dispatcher cases pass |
+| 5 | Owner replacement | Manual recheck passes; during-play cases incomplete |
+| 6 | Same-document recognition | Planning continuity passes |
+| 7 | Frame/document replacement | Historical callback failures unresolved |
+| 8 | Order mutation | Planning invalidation passes |
+| 9 | Lesson/course mutation | Manual mismatch rejection passes; automatic cases incomplete |
+| 10 | Duplicate IDs | Snapshot/manual recheck rejects |
+| 11 | Valid/misleading wrappers | Planning tests pass |
+| 12 | Cross-origin/inaccessible | Inaccessible blocking passes; actual foreign isolation unverified |
+| 13 | Managed active media | Planning tests pass |
+| 14 | Competing/unowned active | Competition/manual-credit rejection passes |
+| 15 | Authentication | Password blocks and diagnoses |
+| 16 | Assessment | VM detection passes; historical failures unresolved |
+| 17 | Delayed readiness | Full-file failures unresolved |
+| 18 | Local completion/no credit | Manual waiting passes |
+| 19 | Prior whole-lesson credit | Historical failures unresolved |
+| 20 | Recheck credit/no credit | Focused cases pass |
+| 21 | Removed owners | Focused cases pass |
+| 22 | Stop/Run/reload/reinjection | Partial/terminal cases pass; full lifecycle failures remain |
+| 23 | Delayed catalog on reload | Actual page reload pause passes |
+| 24 | Stale callbacks | Unit cancellation passes; full navigation failures remain |
+| 25 | Quota/write/readback | Failed-store blocking and journal contract pass; not every variant certified |
+| 26 | Journal clear | Does not release unresolved state |
+| 27 | Recovery budget/terminal | Focused policy/app cases pass |
+| 28 | UI controls/privacy | Focused copy/fallback/clear/recheck/privacy pass |
+
+Build/source synchronization and syntax pass. Exact runtime comparison outside journal schema, block logging and diagnostic presentation is unchanged from baseline. Source acceptance: diagnostic correction scoped/tested, overall acceptance incomplete. Synthetic acceptance: FAIL. Authenticated Chaoxing: UNVERIFIED. No master/tag/release/PR/Issue/upstream changes.
+
+<details><summary>Exact unresolved complete-suite failures</summary>
+
+**preserved**
+
+- `AssertionError [ERR_ASSERTION]: all code outside declared controls/document/countdown changes remains identical` — unresolved.
+
+**native-entry**
+
+- `FAIL: built-in profile finds only the unique native card and leaves live disabled by default` — unresolved.
+- `FAIL: repeated discovery/run/events cannot invoke the original handler or open duplicate windows` — unresolved.
+- `FAIL: manual fallback leaves the registered handler intact and executes its original sequence once` — unresolved.
+- `FAIL: asynchronous #openUrl creation remains platform-owned; inspection never reruns the handler` — unresolved.
+- `FAIL: inspection follows replacement/dynamic destinations without changing links or business listeners` — unresolved.
+- `FAIL: ambiguous/unsupported native entry stops: duplicate` — unresolved.
+- `FAIL: ambiguous/unsupported native entry stops: wrong-card` — unresolved.
+- `FAIL: ambiguous/unsupported native entry stops: bad-url` — unresolved.
+- `FAIL: ambiguous/unsupported native entry stops: duplicate-open` — unresolved.
+- `FAIL: disposed native handoff stays inert after destroy; bounded discovery expired safely` — unresolved.
+- `FAIL: disposed native handoff stays inert after pagehide; bounded discovery expired safely` — unresolved.
+- `FAIL: disposed native handoff stays inert after manual-click; bounded discovery expired safely` — unresolved.
+- `FAIL: disposed native handoff stays inert after replace-entry; bounded discovery expired safely` — unresolved.
+- `FAIL: disposed native handoff stays inert after change-task; bounded discovery expired safely` — unresolved.
+- `FAIL: disposed native handoff stays inert after settings; bounded discovery expired safely` — unresolved.
+- `FAIL: disposed native handoff stays inert after bad-destination; bounded discovery expired safely` — unresolved.
+- `FAIL: native _blank popup has no opener in tested Chrome; no ownership or course credit is inferred` — unresolved.
+
+**navigation**
+
+- `FAIL permissive inactive preview with errors does not discard the pending fifth PDF: Expected values to be strictly equal:` — unresolved.
+- `FAIL diagnostic ordered audio attachments honor independent nextAudio=true: Expected values to be strictly equal:` — unresolved.
+- `FAIL audio native primary and inactive secondary preserve fixed speed and marker-gated natural completion: Expected values to be strictly equal:` — unresolved.
+- `FAIL multi-attachment document-only startup preserves disabled PDF as pending: Expected values to be strictly equal:` — unresolved.
+- `FAIL sidebar assessment remains unanswered and unsupported live remains manual: Expected values to be strictly equal:` — unresolved.
+- `FAIL multi-attachment inventory preserves ordered four videos and pending PDF: Expected values to be strictly equal:` — unresolved.
+- `FAIL automatic startup has bounded failure and a safe manual retry without stale boot actions: page.evaluate: TypeError: Cannot read properties of null (reading '__plays')` — unresolved.
+- `FAIL complex explicit synthetic ownership selects active player and never wakes inactive player: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: visible-inactive: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: playing-inactive: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: no-active-player: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: unknown-audio: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: unknown-leaf: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: wrapper-form: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: inaccessible: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: unverified: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership distinguishes task boundaries from UI: unclassified-audio: Expected values to be strictly equal:` — unresolved.
+- `FAIL complex ownership loss stops old callbacks rather than switching players: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL automatic startup completion and catalog replacement navigate once; complex profile=false: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL automatic startup completion and catalog replacement navigate once; complex profile=true: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender playing: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender before-ended: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender monitor-first: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender after-ended: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender late-marker: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender cooldown: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender cooldown-tree: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender chapter: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender tree: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender chapter-no-ids: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender tree-no-ids: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender cooldown-tree-no-ids: actual next-task click and normal playback: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL catalog rerender nested audition video survives leaf replacement without a chapter ID: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL audition exception permits legitimate ended plus platform marker only: Expected values to be strictly equal:` — unresolved.
+- `FAIL audition classification is rechecked when previously inactive audio starts playing: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL private sample-03: inert outer structure and safe fallback: The expression evaluated to a falsy value:` — unresolved.
+- `FAIL private sample-04: inert outer structure and safe fallback: The expression evaluated to a falsy value:` — unresolved.
+- `FAIL private sample-07: inert outer structure and safe fallback: The expression evaluated to a falsy value:` — unresolved.
+- `FAIL private sample-08: inert outer structure and safe fallback: The expression evaluated to a falsy value:` — unresolved.
+- `FAIL synthetic 1 videos: dynamic discovery, natural end, platform confirmation: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic 3 videos: dynamic discovery, natural end, platform confirmation: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic 4 videos: dynamic discovery, natural end, platform confirmation: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic duplicate ended and monitor callbacks schedule one completion: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic unsupported multi-tab completion stops: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic navigation target: lock, active-node change and new iframe required: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic navigation not acknowledged: bounded stop: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic destroy cancels callbacks and removes guards: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic conflict: positive unfinished count overrides completed icon: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic user changes chapter before old completion: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic video completion while navigation is pending is ignored: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic course has chapters with 1/3/4 videos, one transition each: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic stale completion after player replacement cannot navigate: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic unrelated iframe update cannot acknowledge chapter navigation: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic content title changes during completion verification: stop: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic large-directory completion advances leaf 37 to leaf 38 only: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic cooldown integer milliseconds 5000: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown integer milliseconds 12000: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown integer milliseconds 5327: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown integer milliseconds 9684: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic independent random draw for every eligible navigation: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic duplicate completion and nextUnit schedule only one cooldown: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: destroy: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: block: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: click: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: chapter: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: title: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: pagehide: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: popstate: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: unsupported-task: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: player-replacement: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: target-removal: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: assessment: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: replay: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: content-reload: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: nested-click: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown cancellation and stale callback: completion-marker: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic expiry revalidates completion even without a mutation event: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic expiry revalidates task ended state and generation: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic run invalidates stale cooldown generation: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic disabled cooldown navigates without drawing randomness: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic invalid cooldown range 7000/5000 safely blocks: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic invalid cooldown range 1.5/12000 safely blocks: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic invalid cooldown range 0/2147483648 safely blocks: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic cooldown does not weaken fixed rate or background recovery: page.evaluate: TypeError: Cannot read properties of null (reading '__plays')` — unresolved.
+- `FAIL synthetic successful cooldown callback cannot navigate twice: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic configurable fixed integer range is respected: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic document scrolls incrementally from start to actual bottom without platform polling: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic multiple documents finish locally then await navigation cooldown: The expression evaluated to a falsy value:` — unresolved.
+- `FAIL synthetic mixed document/video keeps video confirmation requirement: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic optional chapter-end 章节测验 stays unfinished and targets next chapter: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic optional chapter-end 章节测试 stays unfinished and targets next chapter: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic optional chapter-end 本章自测 stays unfinished and targets next chapter: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic ambiguous/mandatory assessment stops: 身份验证/true/true: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic ambiguous/mandatory assessment stops: 考试/true/true: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic ambiguous/mandatory assessment stops: 章节测验/true/false: Expected values to be strictly equal:` — unresolved.
+- `FAIL deferred consecutive assessments preserve next learning order; next chapter=false: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL deferred consecutive assessments preserve next learning order; next chapter=true: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL recorded cross-origin popup late platform marker controls parent continuation: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic live ended: associated child closes, marker then cooldown, normal video resumes: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic live near-end: associated child closes, marker then cooldown, normal video resumes: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic blocked popup and cross-origin live entry never retry or advance: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic true live session-finished evidence hands off without invented duration: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic finished video bypasses only trailing optional assessment into next chapter: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL synthetic finished document bypasses only trailing optional assessment into next chapter: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic live closure never closes an unrelated tab: Expected values to be strictly equal:` — unresolved.
+- `FAIL synthetic assessment-only chapter defers without changing unfinished status: Expected "actual" to be strictly unequal to:` — unresolved.
+- `FAIL synthetic verification inside an optional assessment prevents handoff: Expected values to be strictly equal:` — unresolved.
+- `FAIL action settings nextVideo minimum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings nextVideo maximum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings documentScroll minimum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings documentScroll maximum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings nextDocument minimum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings nextDocument maximum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings nextLesson minimum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings nextLesson maximum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings nextChapter minimum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings nextChapter maximum integer bound: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings independently draw single-millisecond values and log three decimals: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL action settings within-lesson next video uses only nextVideo category: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL action settings navigation precedence nextLesson creates one timer and click: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL action settings navigation precedence nextChapter creates one timer and click: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL action settings navigation precedence assessment creates one timer and click: page.evaluate: TypeError: Cannot read properties of undefined (reading 'category')` — unresolved.
+- `FAIL action settings next document first step has one nextDocument delay: Expected values to be strictly equal:` — unresolved.
+- `FAIL action settings live open and return are delayed once with no stacked catalog cooldown: Expected values to be strictly equal:` — unresolved.
+- `FAIL action settings cancellation user rejects stale callbacks: Expected values to be strictly equal:` — unresolved.
+- `FAIL action settings UI mounts compact, expands, validates and restores defaults: locator.evaluate: Error: strict mode violation: locator('#xuexitong-v3-settings').locator('details') resolved to 3 elements:` — unresolved.
+- `FAIL action settings panel clicks do not cancel actions until a relevant setting changes: locator.click: Error: strict mode violation: locator('#xuexitong-v3-settings').locator('summary') resolved to 3 elements:` — unresolved.
+- `FAIL action settings persist whitelisted fields across a new document without account data: locator.click: Error: strict mode violation: locator('#xuexitong-v3-settings').locator('summary') resolved to 3 elements:` — unresolved.
+- `FAIL action settings edits never restart a completed task: page.evaluate: TypeError: Cannot set properties of null (setting '__ended')` — unresolved.
+- `FAIL action settings disabling next chapter also cancels a pending assessment handoff: Expected values to be strictly equal:` — unresolved.
+- `FAIL action settings zero-delay document steps remain incremental and nonblocking: Expected values to be strictly deep-equal:` — unresolved.
+- `FAIL repair A exact four video and PDF inventory waits only for selected readiness; owned UI nonblocking: Expected values to be strictly equal:` — unresolved.
+- `FAIL repair B missing-count does not prove full lesson complete: Expected values to be strictly equal:` — unresolved.
+- `FAIL repair B missing-marker does not prove full lesson complete: Expected values to be strictly equal:` — unresolved.
+- `FAIL repair B document change invalidates prior credit before navigation: Expected values to be strictly equal:` — unresolved.
+- `FAIL repair B completed lesson uses shared navigation and rejects repeated completed identity: Expected values to be strictly equal:` — unresolved.
+- `FAIL controls manual type hint retries BLOCKED once, respects type and stops without parallel playback: Expected values to be strictly equal:` — unresolved.
+- `FAIL controls five-second navigation preview replaces legacy delay; stop and stale identity prevent clicks: Expected values to be strictly equal:` — unresolved.
+- `FAIL controls owned document scroll is gradual; local bottom without platform credit cannot navigate: The expression evaluated to a falsy value:` — unresolved.
+- `FAIL controls delayed document rendering resumes bounded wait and credited reading gets navigation preview: Expected values to be strictly equal:` — unresolved.
+- `FAIL controls native approved-origin replay link opens only by explicit action; text-only cards stay unsupported: Expected values to be strictly equal:` — unresolved.
+- `FAIL credit marker-only text lesson advances without media; contradictory count prevents bypass: Expected values to be strictly equal:` — unresolved.
+- `FAIL credit unknown text lesson observes delayed marker without inventing completion: Expected values to be strictly equal:` — unresolved.
+- `FAIL lifecycle startup wait accepts delayed credit without waiting for media: Expected values to be strictly equal:` — unresolved.
+- `FAIL resumption frame load keeps countdown; in-course route changes resume unfinished video: Expected values to be strictly equal:` — unresolved.
+- `FAIL document continuity catalog replacement same: Expected values to be strictly equal:` — unresolved.
+- `FAIL knowledge map real positive HTML is not displaced by fitting BODY or outer shell: The expression evaluated to a falsy value:` — unresolved.
+- `FAIL entry credit does not replace actual positive-range document reading: The expression evaluated to a falsy value:` — unresolved.
+
+</details>

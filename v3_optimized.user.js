@@ -295,7 +295,7 @@
     function createDecisionJournal(env) {
         const key = 'xuexitong.v3.decision-journal.v1', maxAge = 604800000;
         const types = new Set(['LESSON_DISCOVERED','INVENTORY_CONFIRMED','TASK_RECOGNIZED','TASK_DEFERRED','TASK_STARTED','TASK_LOCAL_COMPLETED','TASK_PLATFORM_CREDITED','TASK_FAILED','EXECUTION_CONTINUED','GLOBAL_BLOCKED','MANUAL_RECHECK','CONTEXT_INVALIDATED','LESSON_WAITING_MANUAL','LESSON_NAVIGATION_AUTHORIZED','RECOVERY_EVENT']);
-        const kinds = new Set(['video','audio','document','unknown','book-reader','timed-reader','audio-slides','hyperlink','legacy-flash']);
+        const kinds = new Set(['lesson','video','audio','document','unknown','book-reader','timed-reader','audio-slides','hyperlink','legacy-flash']);
         const reasons = new Set(['known-owned','isolated-unknown','recognition-only','loading','unsafe-scope','competing-media','inaccessible','context-changed']);
         const evidence = new Set(['owned-inventory','observed-dom','local-operation','platform-marker','none']);
         const ref = () => 'ref-' + env.crypto.randomUUID();
@@ -303,7 +303,7 @@
         const valid = e => e && Object.keys(e).every(k => ['timestamp','session','lesson','ordinal','type','kind','reason','evidence'].includes(k)) &&
             Number.isSafeInteger(e.timestamp) && e.timestamp <= Date.now() && e.timestamp >= Date.now()-maxAge &&
             [e.session,e.lesson].every(v => typeof v === 'string' && /^ref-[0-9a-f-]{36}$/.test(v)) &&
-            Number.isSafeInteger(e.ordinal) && e.ordinal >= 0 && e.ordinal < 10000 && types.has(e.type) && kinds.has(e.kind) && reasons.has(e.reason) && evidence.has(e.evidence);
+            ((e.kind==='lesson'&&e.ordinal===null)||(e.kind!=='lesson'&&Number.isSafeInteger(e.ordinal)&&e.ordinal>=0&&e.ordinal<10000)) && types.has(e.type) && kinds.has(e.kind) && reasons.has(e.reason) && evidence.has(e.evidence);
         const prune = rows => { const clean = rows.filter(valid).slice(-200); while(JSON.stringify({version:1,events:clean}).length*2 > 131072) clean.shift(); return clean; };
         const read = () => { try { const raw=JSON.parse(env.localStorage.getItem(key)||'{"version":1,"events":[]}'); return raw.version===1&&Array.isArray(raw.events)?prune(raw.events):[]; } catch (_) { return []; } };
         return Object.freeze({
@@ -1476,7 +1476,7 @@
                 const state=/^[A-Z_]{1,40}$/.test(this._state)?this._state:'UNKNOWN';
                 const tasks=valid?session.plan.tasks.map(task=>({ordinal:task.ordinal+1,kind:task.kind,classification:task.classification,reason:task.reason,
                     locallyProcessed:task.classification==='EXECUTABLE_KNOWN'&&(task.kind==='document'?this._processedTasks.has(task.owner):this._completedVideos.has(task.target))})):null;
-                return {version:'3.4.0',session:this._decisionJournal?.reference?.(this)||null,generatedAt:new Date().toISOString(),state,inventory:tasks,
+                return {currentBlock:this._state==='BLOCKED'?this._currentDiagnosticBlock||null:null,version:'3.4.0',session:this._decisionJournal?.reference?.(this)||null,generatedAt:new Date().toISOString(),state,inventory:tasks,
                     inventoryStatus:valid?'current':'stale-or-unavailable',platformCredit:this._priorProof(catalog.current())===true,
                     events:this._decisionJournal?.read?.()||[]};
             },
@@ -1490,8 +1490,9 @@
                     const labels={WAITING_MANUAL_TASKS:'等待人工处理',BLOCKED:'安全阻断',PAUSED_AUTOMATION:'已暂停',PLAYING:'运行中',READING_DOCUMENT:'运行中',FINISHED:'已结束'};
                     const deferred=tasks?.filter(t=>t.classification.startsWith('DEFERRED'));
                     output.textContent=`状态：${labels[report.state]||'检测中'}；本地已处理：${tasks?tasks.filter(t=>t.locallyProcessed).length:'未知'}；未解决：${deferred?deferred.length:'未知'}；整课平台信用：${report.platformCredit?'已观察确认':'未确认'}。`+
+                        (report.currentBlock?'当前安全阻断：'+report.currentBlock.reason+'（课节级，附件身份未确认）。':'')+
                         (tasks?deferred.map(t=>`${t.ordinal}.${t.kind}：${t.reason==='isolated-unknown'?'独立未知附件，需人工处理':'已识别，缺少执行证据'}`).join('；'):'等待重新检测；不能从历史日志恢复完成状态');
-                    if(details.open)history.textContent=report.events.slice(-8).map(e=>`${e.type} · ${e.ordinal+1}.${e.kind} · ${e.reason}`).join('\n')||'暂无记录';
+                    if(details.open)history.textContent=report.events.slice(-8).map(e=>`${e.type} · ${e.ordinal===null?'课节':e.ordinal+1}.${e.kind} · ${e.reason}`).join('\n')||'暂无记录';
                 };
                 for(const [action,label]of [['copy','复制诊断报告'],['clear','清除诊断历史'],['recheck','重新核对当前小节']]){
                     const button=document.createElement('button');button.type='button';button.dataset.diagnosticAction=action;button.textContent=label;
@@ -2293,7 +2294,8 @@
                 this._clearCheckInterval();
             },
             _block(reason) {
-                if(this._partialSession)this._partialEvent('GLOBAL_BLOCKED',this._partialSession.selected,'unsafe-scope');
+                this._currentDiagnosticBlock={type:'GLOBAL_BLOCKED',reason:'unsafe-scope',evidence:'none',kind:'lesson',ordinal:null};
+                try { const journal=this._decisionJournal;if(journal)journal.append({lesson:journal.reference(catalog.current()||this),...this._currentDiagnosticBlock}); } catch (_) { /* Blocking must succeed even without diagnostic storage. */ }
                 this._recovery?.cancel('terminal-block');
                 this._state = 'BLOCKED';
                 this._isPlaying = false;

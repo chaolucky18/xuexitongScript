@@ -20,6 +20,14 @@ const context = {
     setTimeout() { assert.fail('Blocked content must not schedule navigation'); },
     clearTimeout() {},
 };
+// Reviewed runtime now uses durable browser storage and lifecycle listeners.
+// Supply those browser capabilities rather than relying on an originless VM.
+const storage = new Map();
+Object.assign(context.window, { location:{href:'https://mooc1.chaoxing.com/?courseId=synthetic'},
+    localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+    sessionStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+    crypto:{randomUUID:()=> '00000000-0000-4000-8000-000000000000'},addEventListener(){},removeEventListener(){} });
+context.URL=URL;context.location=context.window.location;context.sessionStorage=context.window.sessionStorage;context.localStorage=context.window.localStorage;
 vm.runInNewContext(source, context);
 boot();
 const app = context.window.app;
@@ -36,8 +44,10 @@ assert.equal(app._isChapterTest(), true);
 app.nextUnit();
 assert.equal(app._state, 'BLOCKED');
 title = 'Unknown resource';
+app._recovery.resumeExplicitly(); // An explicit test retry must respect terminal recovery semantics.
 app.run();
+assert.equal(app._state, 'BLOCKED'); // Discovery rejects unknown content.
 await app.play();
-assert.equal(app._state, 'BLOCKED');
+assert.equal(app._state, 'PAUSED_AUTOMATION'); // Terminal guard refuses automatic reentry.
 assert.equal(app._timers.size, 0);
 console.log('PASS: fixed 1.0x configuration, assessment detection, and unknown-content safety (VM smoke).');

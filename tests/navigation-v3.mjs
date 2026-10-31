@@ -31,13 +31,14 @@ const outer = (entries = 1, complete = false, title = '视频') => `<div class="
 async function setup(html = outer(), count = 1, nested = false, scopeCase = null, enableCooldown = false, syntheticOrigin = false, automatic = false, scriptSource = source) {
     const context = await browser.newContext({ serviceWorkers: 'block' });
     await context.route('**/*', route => route.abort());
-    if (syntheticOrigin) await context.route('https://course.test/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><video id="live-player"></video></body></html>' }));
+    await context.route('https://course.test/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><video id="live-player"></video></body></html>' }));
     if (syntheticOrigin === 'recorded') {
         await context.route('https://mooc1.chaoxing.com/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Synthetic course</title>' }));
         await context.route('https://zhibo.chaoxing.com/**', route => route.fulfill({ contentType: 'text/html', body: replayPopup }));
     }
     const page = await context.newPage();
     if (syntheticOrigin) await page.goto(syntheticOrigin === 'recorded' ? 'https://mooc1.chaoxing.com/synthetic-course' : syntheticOrigin === 'pacing' ? 'https://course.test/course?courseId=synthetic' : 'https://course.test/course');
+    if (!syntheticOrigin) await page.goto('https://course.test/course'); // Real storage-capable origin for current browser lifecycle APIs.
     // DOMParser is inert. Strip executable/resource-bearing content before insertion.
     const sanitized = await page.evaluate(html => {
         const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -552,7 +553,7 @@ try {
             if (variant === 'audio') root.querySelector('audio').id = 'unknownAudio';
             if (variant === 'sibling') window.__attachmentVideos[2].__paused = false;
             const settings = JSON.parse(JSON.stringify(app.settings)); settings.features.document = false;
-            settings.randomDelaysEnabled = false; app.updateSettings(settings); if (restart) app.run();
+            settings.randomDelaysEnabled = false; app.updateSettings(settings); if (restart) (app._recovery?.resumeExplicitly(),app.run());
         }, { variant, restart });
     }
     async function selectSidebar(page, index = 1) {
@@ -1480,7 +1481,7 @@ try {
             app.settings.delays.documentScroll.minMs = 400; app.settings.delays.documentScroll.maxMs = 1200;
             window.__scrollPositions = []; window.__docDelays = [];
             let draw = 0; const values = [0.1, 0.5, 0.9]; Math.random = () => values[draw++ % values.length];
-            app.run();
+            (app._recovery?.resumeExplicitly(),app.run());
         }, { count, mixed });
     }
     await check('synthetic document scrolls incrementally from start to actual bottom without platform polling', () => using([outer(2), 0, false, null, true], async page => {
@@ -1594,7 +1595,7 @@ try {
                 document.querySelector('#node0').classList.remove('posCatalog_active'); document.querySelector('#node1').classList.add('posCatalog_active');
                 const f = document.createElement('iframe'); f.setAttribute('info', 'card'); document.querySelector('iframe[info="card"]').replaceWith(f); window.__addVideos(1);
             };
-            app.run();
+            (app._recovery?.resumeExplicitly(),app.run());
         }, recorded);
         if (beforeOpen) await beforeOpen(page);
         const child = await popupPromise;
@@ -2136,7 +2137,7 @@ try {
                     doc.querySelector('iframe').contentDocument.body.innerHTML='<canvas></canvas><button>Next page</button>';
                 }
             }
-            app.run();
+            (app._recovery?.resumeExplicitly(),app.run());
         },html);
     }
     await check('repair A exact four video and PDF inventory waits only for selected readiness; owned UI nonblocking',()=>using([outer(),1],async page=>{
@@ -2177,7 +2178,7 @@ try {
             if(variant==='missing-count')node.querySelector('input').remove();
             if(variant==='missing-marker')node.querySelector('.icon_Completed').remove();
             window.__creditPlayers=[...app._playableMedia().videos];for(const v of window.__creditPlayers){v.__plays=0;v.__paused=true;}
-            app.run();
+            (app._recovery?.resumeExplicitly(),app.run());
         },variant);
     }
     for(const variant of ['single','multi'])await check(`repair B reliable ${variant} platform credit avoids replay without fabricated ended`,()=>using([outer(),1],async page=>{
@@ -2730,6 +2731,18 @@ try {
     await check('diagnostics clear and copy preserve unrelated managed playback',()=>using([outer(),1,false,null,false,'pacing'],async page=>{
         const plays=await page.evaluate(()=>app._videoEl.__plays);await page.evaluate(()=>{app._settingsPanel.shadowRoot.querySelector('details').open=true;app._settingsPanel.shadowRoot.querySelector('[data-diagnostics]').open=true;Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:text=>{window.__copiedDiagnostics=text;return Promise.resolve();}}});});
         const host=page.locator('#xuexitong-v3-settings');await host.locator('[data-diagnostic-action="copy"]').click();await host.locator('[data-diagnostic-action="clear"]').click();assert.equal(await state(page),'PLAYING');assert.equal(await page.evaluate(()=>app._videoEl.__plays),plays);assert.equal(await page.evaluate(()=>JSON.parse(window.__copiedDiagnostics).inventoryStatus),'stale-or-unavailable');
+    }));
+    for(const mode of ['unowned','inaccessible','verification','storage'])await check(`global block journal without partial session ${mode}`,()=>using([outer(),0,false,null,false,'pacing'],async page=>{
+        await page.evaluate(mode=>{app.stopAutomation();app._recovery.resumeExplicitly();const root=document.querySelector('iframe[info="card"]').contentDocument;root.body.innerHTML='<iframe></iframe>';const f=root.querySelector('iframe');f.contentDocument.body.innerHTML='<p>PRIVATE_TOKEN https://private.invalid/?credential=secret</p>';
+            if(mode==='inaccessible')Object.defineProperty(f,'contentDocument',{get:()=>null});
+            if(mode==='verification')root.body.innerHTML='<input type="password">';
+            app._decisionJournal.clear();if(mode==='storage')app._decisionJournal={append:()=>{throw Error('quota');},reference:()=> 'ref-00000000-0000-4000-8000-000000000000',read:()=>[]};app.run();
+        },mode);
+        await flush(page,15);
+        assert.equal(await state(page),'BLOCKED');assert.equal(await page.evaluate(()=>!!app._partialSession),false);
+        const report=await page.evaluate(()=>app._diagnosticReport());assert.deepEqual(report.currentBlock,{type:'GLOBAL_BLOCKED',reason:'unsafe-scope',evidence:'none',kind:'lesson',ordinal:null});
+        assert.ok(!JSON.stringify(report).includes('PRIVATE_TOKEN'));assert.ok(!JSON.stringify(report).includes('private.invalid'));
+        if(mode!=='storage'){assert.equal(report.events.at(-1).type,'GLOBAL_BLOCKED');assert.equal(report.events.at(-1).ordinal,null);}
     }));
     console.log(`RESULT: ${passed} passed, ${failures.length} failed; local Chrome DOM tests, simulated media/timers, no live platform.`);
     if (failures.length) process.exitCode = 1;

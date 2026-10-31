@@ -71,7 +71,20 @@ async function setup({ natural = false, wrongFlags = false, wrongHref = false, n
     await parent.addScriptTag({ content: jquery });
     if (!coreFirst && !missingCompanion) await parent.addScriptTag({ content: bridge });
     await parent.addScriptTag({ content: core });
-    await parent.waitForFunction(() => window.app?._state === 'WAITING_LIVE');
+    await parent.waitForFunction(() => ['WAITING_LIVE','BLOCKED','WAITING_MANUAL_TASKS','PAUSED_AUTOMATION'].includes(window.app?._state));
+    assert.equal(await parent.evaluate(()=>app._state),'WAITING_LIVE','bridge fixture must reach the original WAITING_LIVE prerequisite');
+    // Native replay now uses its separately reviewed GM lifecycle. Exercise the
+    // optional companion adapter explicitly instead of assuming it is auto-selected.
+    await parent.evaluate(()=>{
+        window.__startOptionalBridge=()=>{
+        const entry=document.querySelector('iframe').contentDocument.querySelector('a.liveHref'),generation=app._generation;
+        app._liveController=window.__xuexitongTaskSupport.createParent({entry,nativeEntry:true,generation,threshold:.99,
+            isValid:()=>app._state==='WAITING_LIVE'&&app._generation===generation&&entry.isConnected,
+            isPlatformComplete:()=>app._priorProof(document.querySelector('.posCatalog_active')),
+            onResult:()=>{throw Error('unauthenticated companion must not authorize continuation');},onError:reason=>app._block(reason)});
+        app._liveController.start();
+        };window.__startOptionalBridge();
+    });
     await parent.waitForFunction(() => window.__bridgePublic.some(message => message.type === 'PING'));
     if (discoveryCleanup) await parent.evaluate(kind => {
         if (kind === 'destroy') app.destroy();
@@ -79,7 +92,7 @@ async function setup({ natural = false, wrongFlags = false, wrongHref = false, n
         if (kind === 'dispose') window.__xuexitongTaskSupport.dispose();
         if (kind === 'settings') { const settings=structuredClone(app.settings);settings.features.live=false;app.updateSettings(settings); }
         if (kind === 'task') { document.querySelector('.posCatalog_active').id='different-synthetic-task'; }
-        if (kind === 'restart') app.run();
+        if (kind === 'restart') { app.run(); window.__startOptionalBridge(); }
     }, discoveryCleanup);
     if (companionDelay) await parent.waitForTimeout(companionDelay);
     if (coreFirst && !missingCompanion) await parent.addScriptTag({ content: bridge });
