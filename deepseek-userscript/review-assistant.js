@@ -51,6 +51,7 @@
     function clearChapter() {
         state.ready = null; state.signature = ''; state.completed = false;
         result.replaceChildren(); status.textContent = ''; state.waitingForReview = false;
+        state.lineRecovery?.reset();
     }
     const resumeVideo = () => {
         const app = window.__xuexitongPlayerV3;
@@ -60,6 +61,10 @@
         root: document, core, isActive: () => state.active,
         onStatus: message => { status.textContent = message; }, onVideo: resumeVideo,
         onFallback: () => window.__xuexitongPlayerV3?.nextUnit(),
+    }) : null;
+    const lineRecovery = typeof createVideoLineRecovery === 'function' ? createVideoLineRecovery({
+        root: document, core, isActive: () => state.active,
+        onStatus: message => { status.textContent = message; },
     }) : null;
     const flow = createLearningFlow({ root: document, core, isActive: () => state.active,
         onHold: () => { state.waitingForReview = true; holdPlayback(); },
@@ -78,10 +83,12 @@
         return videos.find(video => video.readyState > 0) || videos[0] || null;
     };
     state.beforeNext = flow.beforeNext; state.isQuizPage = flow.isQuizPage; state.stepTitle = flow.stepTitle;
+    state.lineRecovery = lineRecovery;
+    state.recoverVideoLine = () => lineRecovery?.observe() || false;
     function start() {
         if (state.active) return;
         state.active = true; state.epoch++;
-        navigation?.reset(); flow.reset(); clearChapter();
+        navigation?.reset(); flow.reset(); lineRecovery?.reset(); clearChapter();
         const epoch = state.epoch;
         submission = createSubmissionHelper({ root: document, core,
             isEnabled: () => state.active && state.epoch === epoch && autoSubmit.checked,
@@ -94,7 +101,7 @@
     }
     function stop() {
         state.active = false; state.epoch++;
-        navigation?.reset(); flow.reset();
+        navigation?.reset(); flow.reset(); lineRecovery?.reset();
         clearInterval(scanTimer); clearInterval(healthTimer);
         for (const controller of requests) controller.abort();
         requests.clear();
@@ -194,6 +201,7 @@
     function scan() {
         if (!state.active) return;
         try {
+            if (state.recoverVideoLine()) return;
             flow.sync();
         navigation?.observe();
             const questions = questionsNow();

@@ -47,7 +47,22 @@ w.eval(compiled);
 try {
  const boot=[...intervals.values()].find(t=>t.ms===1000);assert.ok(boot);boot.fn();await sleep(20);
  assert.equal(plays,1,'Initial video must autoplay');
- if(scenario==='iframe-replaced') {
+ if(scenario==='media-error') {
+  const lineSource={src:'https://s2.cldisk.com/sv-s1/video/34/example/sd.mp4?token=test',type:'video/mp4',res:360};
+  const lines=[{label:'公网1',net:'p1',prefix:'s2'},{label:'公网2',net:'p2',prefix:'s1'},{label:'本校',net:'s0',url:'http://219.231.0.15'}];
+  let switched=null;
+  const player={currentSource:()=>switched||lineSource,currentSources:()=>[switched||lineSource],currentPlayline:()=>lines[0],
+   options_:{playlines:lines},getGroupedSrc:()=>({label:{'高清':[lineSource]}}),
+   selectCDN(index){switched={...lineSource,src:lineSource.src.replace('s2.cldisk.com','s1.cldisk.com')};video.error=null;return this},
+   src(next){switched=next;video.error=null;return this},play(){plays++;return Promise.resolve()}};
+  videoDoc.defaultView.videojs={players:{video:player}};
+  video.error={code:4,message:'PIPELINE_ERROR_READ'};
+  docs.body.insertAdjacentHTML('beforeend','<div class="vjs-error-display vjs-modal-dialog"><p>无法播放媒体。</p><label><input type="radio" name="ans-vjserrdisplay-opt" disabled>公网1</label><label><input type="radio" name="ans-vjserrdisplay-opt">公网2</label><label><input type="radio" name="ans-vjserrdisplay-opt">本校</label></div>');
+  assert.equal(w.__xuexitongDeepSeekReview.recoverVideoLine(),true);
+  assert.equal(switched.src,'https://s1.cldisk.com/sv-s1/video/34/example/sd.mp4?token=test','Media error must switch to the next enabled line');
+  assert.equal(video.error,null,'Recovered source should clear the failed media state');
+  console.log('PASS: built userscript recovers a failed media line');
+ }else if(scenario==='iframe-replaced') {
   // A retired iframe document can keep connected video nodes even after navigation.
   const retired=w.document.implementation.createHTMLDocument('retired');
   const stale=retired.createElement('video');stale.id='video_html5_api';retired.body.appendChild(stale);

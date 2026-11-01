@@ -3,9 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
 
 const root = import.meta.dirname;
-const out = resolve(root, 'dist');
+const out = process.env.XUEXITONG_OUTPUT_DIR
+    ? resolve(process.env.XUEXITONG_OUTPUT_DIR)
+    : resolve(root, 'dist');
 mkdirSync(out, { recursive: true });
-const tokenPath = resolve(out, '.service-token');
+const tokenPath = process.env.XUEXITONG_TOKEN_PATH
+    ? resolve(process.env.XUEXITONG_TOKEN_PATH)
+    : resolve(out, '.service-token');
 if (!existsSync(tokenPath)) writeFileSync(tokenPath, randomBytes(24).toString('hex'), { mode: 0o600 });
 chmodSync(tokenPath, 0o600);
 const token = readFileSync(tokenPath, 'utf8').trim();
@@ -23,7 +27,7 @@ player = replaceOnce(player, '                        this._isPlaying = false;\n
                         this._isPlaying = false;
                         this._clearCheckInterval();
                         if (this.configs.autoAdvanceNoVideo)`);
-player = replaceOnce(player, '// @version      3.3.0', '// @version      3.4.5');
+player = replaceOnce(player, '// @version      3.3.0', '// @version      3.4.6');
 player = replaceOnce(player, '// @description  自动播放、自动切换下一节，并在页面结构异常时安全停止', '// @description  自动播放与换节，DeepSeek 识题填答，可切换自动提交');
 player = replaceOnce(player, '// @grant        none', '// @grant        none\n// @noframes');
 player = replaceOnce(player, '            run() {', `            run() {
@@ -38,7 +42,10 @@ for (const method of ['nextUnit()', 'playCurrentIndex(nCell)', '_advanceLearning
     player = replaceOnce(player, `            ${method} {`, `            ${method} {\n                if (!this._scriptRunning) return;`);
 }
 player = replaceOnce(player, '            _handlePlayError(error) {', `            _handlePlayError(error) {
-                if (!this._scriptRunning || window.__xuexitongDeepSeekReview?.waitingForReview || window.__xuexitongDeepSeekReview?.isQuizPage?.()) return;`);
+                if (!this._scriptRunning || window.__xuexitongDeepSeekReview?.waitingForReview || window.__xuexitongDeepSeekReview?.isQuizPage?.()) return;
+                if (window.__xuexitongDeepSeekReview?.recoverVideoLine?.()) return;`);
+player = replaceOnce(player, '            _checkVideoStatus() {', `            _checkVideoStatus() {
+                if (window.__xuexitongDeepSeekReview?.recoverVideoLine?.()) return;`);
 player = replaceOnce(player, '            nextUnit() {\n                if (!this._scriptRunning) return;', `            nextUnit() {
                 if (!this._scriptRunning) return;
                 if (window.__xuexitongDeepSeekReview?.beforeNext?.()) return;
@@ -98,8 +105,9 @@ const core = readFileSync(resolve(root, 'quiz-core.cjs'), 'utf8').replace('modul
 const submission = readFileSync(resolve(root, 'submit-helper.cjs'), 'utf8').replace('module.exports = createSubmissionHelper;', '');
 const flow = readFileSync(resolve(root, 'learning-flow.cjs'), 'utf8').replace('module.exports = createLearningFlow;', '');
 const navigation = readFileSync(resolve(root, 'section-navigation.cjs'), 'utf8').replace('module.exports = createSectionNavigation;', '');
+const lineRecovery = readFileSync(resolve(root, 'video-line-recovery.cjs'), 'utf8').replace('module.exports = createVideoLineRecovery;', '');
 const assistant = readFileSync(resolve(root, 'review-assistant.js'), 'utf8').replace("const LOCAL_TOKEN = '__LOCAL_TOKEN__';", `const LOCAL_TOKEN = '${token}';`);
-writeFileSync(resolve(out, '学习通-DeepSeek.user.js'), player + '\n(function () {\n' + core + '\n' + submission + '\n' + flow + '\n' + navigation + '\n' + assistant + '\n})();\n', { mode: 0o600 });
+writeFileSync(resolve(out, '学习通-DeepSeek.user.js'), player + '\n(function () {\n' + core + '\n' + submission + '\n' + flow + '\n' + navigation + '\n' + lineRecovery + '\n' + assistant + '\n})();\n', { mode: 0o600 });
 for (const file of ['local-service.mjs', 'deepseek-request.mjs', 'quiz-core.cjs']) {
     writeFileSync(resolve(out, file), readFileSync(resolve(root, file)));
 }
