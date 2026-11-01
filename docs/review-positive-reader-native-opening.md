@@ -628,3 +628,182 @@ Build/source synchronization and syntax pass. Exact runtime comparison outside j
 - `FAIL entry credit does not replace actual positive-range document reading: The expression evaluated to a falsy value:` — unresolved.
 
 </details>
+
+### D1/D2/D3 complete-suite reconciliation (baseline 47fa242)
+
+STATUS: PARTIAL; no production implementation changed. Earlier failure lists above
+remain historical evidence, not the result of this reconciliation run.
+
+The accepted frozen comparison baseline is
+`5ee97211889c93c402047eefac3bef90d40fb0e2`. The old preservation projection's
+first divergence was the IIFE/window boundary and GM initialization, followed by
+catalog-credit ownership checks. Those are authorized changes after its older
+`b880e877`/`e907cdda` snapshots, not proof that the current diagnostic patch changed
+playback. The replacement asserts exact equality for 21 named methods and six
+bounded code regions (27 comparisons), plus independent 1.0x/partial-navigation
+veto checks. Boundary existence is asserted; there is no unconditional PASS.
+Intentionally evolved planning/partial/diagnostic methods remain subject to
+application-path integration tests, including the unresolved results below.
+
+| Family | Classification and observed failure | Correction / boundary |
+| --- | --- | --- |
+| Action ranges and panel selectors | B: nextVideo expected 500–1500ms, actual accepted 3000–7000ms; strict locator found three details/summary elements | Assert current category ranges and target the outer panel; no scheduling source change |
+| Cooldown initial state | A/B: fixture marked lesson already completed, leaving `_videoEl` null under prior-credit shortcut | Start unfinished; introduce real fixture marker with genuine ended dispatch |
+| Cooldown callbacks | D: callbacks fired without advancing Date.now although pacing checks absolute deadlines | Store integer deadlines, advance simulated wall clock when firing; use the same monotonic clock for elapsed reader time |
+| Complex ownership | A: injected verified adapter after prior block, actual PAUSED_AUTOMATION instead of PLAYING/BLOCKED | Explicit fixture Resume before revalidation; preserve ownership and no-wakeup assertions |
+| Catalog reconstruction | A/D: new iframe inspected before browser load event; selected video null | Yield to browser iframe load and advance pending callbacks; retain one-click, new-player and 1.0x assertions |
+| Native entry | A/B: historical manual-fallback suite invoked newer automatic opening path | Explicitly instantiate existing manual-only adapter; retain native-handler, popup-ownership and no-false-completion assertions. Only expected unsupported-entry refusal is caught |
+| Preservation | B: obsolete whole-file projection rejected approved GM/catalog/planning integrations | Exact reviewed frozen-component boundary described above |
+| Remaining failures | E: not established as production regressions or obsolete expectations | Unchanged failed assertions remain visible; no blanket state replacement |
+
+Controlled identity comparison: adding only `?courseId=synthetic` to the ordinary
+navigation fixture left the selected 122-case families at 55 PASS / 67 FAIL.
+An original-HEAD native-entry temporary copy with only that URL change remained
+2 PASS / 17 FAIL. The committed default ordinary URLs are unchanged. Optional
+`FIXTURE_COURSE_ID=1` is a test comparison hook, not a production identity fallback.
+
+Differential source comparison used the same four representative cases against
+both `94b26728e3350438645bc59f6476610f5c6927ab` and
+`5ee97211889c93c402047eefac3bef90d40fb0e2` via `REGRESSION_REF`:
+one updated range case passed, while complex ownership, catalog reconstruction
+and null-player cooldown failed on both. This establishes that those three
+representative failures predate the latest diagnostics; it does NOT classify
+all remaining failures as pre-existing.
+
+A preliminary complete run suffered Chrome target crashes and was discarded as
+acceptance evidence. The final complete files run serially with TEST_FILTER,
+REGRESSION_REF and FIXTURE_COURSE_ID unset. Browser version: Chrome 156.0.8078.76.
+Private fixtures remain locally excluded; only sanitized test code and this
+review history are published.
+
+Final complete-file results (no TEST_FILTER):
+
+| Command | Final result | Starting result where applicable |
+| --- | --- | --- |
+| `node tests/navigation-v3.mjs` | 455 PASS / 80 FAIL (535 attempted, no browser-closure errors) | 387 PASS / 148 FAIL |
+| `node tests/preserved-v3.mjs` | PASS: 27 exact frozen comparisons plus speed/veto assertions | Failed first historical whole-file projection |
+| `node tests/verify-v3.mjs` | PASS: syntax and generated payload equality | PASS |
+| `node tests/customization-v3.mjs` | PASS | PASS |
+| `node tests/task-pacing-v3.mjs` | PASS: six pacing groups plus recovery/reader/journal checks | PASS |
+| `node tests/bridge-v3.mjs` | 31 PASS / 0 FAIL | PASS |
+| `node tests/gm-live-v3.mjs` | 10 PASS / 0 FAIL | PASS |
+| `node tests/native-entry-v3.mjs` | 19 PASS / 0 FAIL | 2 PASS / 17 FAIL |
+| `node tests/recorded-live-v3.mjs` | 21 PASS / 0 FAIL | PASS |
+
+Final navigation reduced the original failures by 68. The final eight other
+files passed in full; native-entry was rerun in full after correcting optional
+access to absent task lists. The final navigation rerun includes the corrected
+6001-wide random sample denominator and all outer-panel selectors. Intermediate
+browser-unavailable runs are not counted as integration acceptance.
+
+Critical safe-partial checks passed in the final full run: video -> unknown ->
+audio -> document -> video; unknown remains unresolved; journal-write failure
+prevents crossing; reload and unresolved identity remain paused; all six
+missing-owner recheck cases (credit/no-credit/verification/duplicate/course/active)
+retain their safety assertions; diagnostics and global-block journal cases pass.
+These results do not repair or erase the older failed cases listed below.
+
+Additional commands: `node scripts/build-userscript.mjs`; `node --check` for source,
+generated userscript and all three changed test files; `git diff --check`.
+All passed. Source and generated userscript have no Git diff against 47fa242;
+all production functions and modules are unchanged in this correction.
+
+Acceptance conclusions:
+- Source preservation: PASS for the explicitly documented frozen comparisons;
+  overall implementation acceptance remains PARTIAL.
+- Synthetic integration: FAIL (80 assertions/fixture errors remain); not PASS.
+- Authenticated Chaoxing acceptance: NOT RUN, still PARTIAL pending user testing.
+
+#### Remaining failure ledger
+
+Each row is an unresolved assertion/fixture error from the final complete run.
+The first available actual/expected difference is included. Attribution remains
+E (incomplete evidence), rather than guessing a runtime regression or relabeling
+an expected blocked state. Null-player failures need startup/completion fixture
+preconditions distinguished from genuine runtime defects; pending/unknown and
+transition-state differences need the current planning/credit contract checked.
+No test was suppressed to manufacture a PASS. Full raw logs stay local under
+`work/acceptance-reconciled/` outside the repository; no private HTML is published.
+
+| Unresolved test / first failure | First actual/expected difference, where supplied |
+| --- | --- |
+| permissive inactive preview with errors does not discard the pending fifth PDF: Expected values to be strictly equal: | + actual - expected<br>+ 'unknown'<br>- 'pending' |
+| diagnostic ordered audio attachments honor independent nextAudio=true: Expected values to be strictly equal: | + actual - expected<br>+ undefined<br>- 'nextAudio' |
+| audio native primary and inactive secondary preserve fixed speed and marker-gated natural completion: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| multi-attachment document-only startup preserves disabled PDF as pending: Expected values to be strictly equal: | + actual - expected<br>+ 'unknown'<br>- 'pending' |
+| sidebar assessment remains unanswered and unsupported live remains manual: Expected values to be strictly equal: | + actual - expected<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| multi-attachment inventory preserves ordered four videos and pending PDF: Expected values to be strictly equal: | + actual - expected<br>+ 'unknown'<br>- 'pending' |
+| automatic startup has bounded failure and a safe manual retry without stale boot actions: page.evaluate: TypeError: Cannot read properties of null (reading '__plays') | See first failure at left; no actual/expected diff supplied |
+| catalog rerender nested audition video survives leaf replacement without a chapter ID: page.evaluate: TypeError: Cannot read properties of null (reading 'playbackRate') | See first failure at left; no actual/expected diff supplied |
+| audition exception permits legitimate ended plus platform marker only: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_PLATFORM_COMPLETION'<br>- 'PLAYING' |
+| audition classification is rechecked when previously inactive audio starts playing: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| private sample-03: inert outer structure and safe fallback: The expression evaluated to a falsy value: | See first failure at left; no actual/expected diff supplied |
+| private sample-04: inert outer structure and safe fallback: The expression evaluated to a falsy value: | See first failure at left; no actual/expected diff supplied |
+| private sample-07: inert outer structure and safe fallback: The expression evaluated to a falsy value: | See first failure at left; no actual/expected diff supplied |
+| private sample-08: inert outer structure and safe fallback: The expression evaluated to a falsy value: | See first failure at left; no actual/expected diff supplied |
+| synthetic 1 videos: dynamic discovery, natural end, platform confirmation: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_PLATFORM_COMPLETION'<br>- 'PLAYING' |
+| synthetic 3 videos: dynamic discovery, natural end, platform confirmation: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_PLATFORM_COMPLETION'<br>- 'PLAYING' |
+| synthetic 4 videos: dynamic discovery, natural end, platform confirmation: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_PLATFORM_COMPLETION'<br>- 'PLAYING' |
+| synthetic duplicate ended and monitor callbacks schedule one completion: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic unsupported multi-tab completion stops: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic navigation target: lock, active-node change and new iframe required: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic navigation not acknowledged: bounded stop: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic destroy cancels callbacks and removes guards: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic conflict: positive unfinished count overrides completed icon: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic user changes chapter before old completion: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic video completion while navigation is pending is ignored: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic course has chapters with 1/3/4 videos, one transition each: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_PLATFORM_COMPLETION'<br>- 'PLAYING' |
+| synthetic stale completion after player replacement cannot navigate: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic unrelated iframe update cannot acknowledge chapter navigation: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic content title changes during completion verification: stop: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic large-directory completion advances leaf 37 to leaf 38 only: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'PLAYING' |
+| synthetic independent random draw for every eligible navigation: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic cooldown cancellation and stale callback: chapter: Expected values to be strictly equal: | + actual - expected<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| synthetic disabled cooldown navigates without drawing randomness: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic invalid cooldown range 7000/5000 safely blocks: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_COMPLETION'<br>- 'BLOCKED' |
+| synthetic invalid cooldown range 1.5/12000 safely blocks: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_COMPLETION'<br>- 'BLOCKED' |
+| synthetic invalid cooldown range 0/2147483648 safely blocks: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_COMPLETION'<br>- 'BLOCKED' |
+| synthetic successful cooldown callback cannot navigate twice: Expected values to be strictly equal: | 0 !== 1 |
+| synthetic document scrolls incrementally from start to actual bottom without platform polling: Expected values to be strictly equal: | + actual - expected<br>+ 'READING_DOCUMENT'<br>- 'NAVIGATION_COOLDOWN' |
+| synthetic multiple documents finish locally then await navigation cooldown: Expected values to be strictly deep-equal: | + actual - expected<br>+   0,<br>+   0<br>-   600,<br>-   600 |
+| synthetic mixed document/video keeps video confirmation requirement: Expected values to be strictly equal: | + actual - expected<br>+ 'READING_DOCUMENT'<br>- 'PLAYING' |
+| synthetic ambiguous/mandatory assessment stops: 身份验证/true/true: Expected values to be strictly equal: | + actual - expected<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| synthetic ambiguous/mandatory assessment stops: 考试/true/true: Expected values to be strictly equal: | + actual - expected<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| synthetic ambiguous/mandatory assessment stops: 章节测验/true/false: Expected values to be strictly equal: | + actual - expected<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| deferred consecutive assessments preserve next learning order; next chapter=false: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| deferred consecutive assessments preserve next learning order; next chapter=true: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| recorded cross-origin popup late platform marker controls parent continuation: Expected values to be strictly equal: | + actual - expected<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic live ended: associated child closes, marker then cooldown, normal video resumes: Expected values to be strictly equal: | + actual - expected<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic live near-end: associated child closes, marker then cooldown, normal video resumes: Expected values to be strictly equal: | + actual - expected<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic blocked popup and cross-origin live entry never retry or advance: Expected values to be strictly equal: | + actual - expected<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| synthetic true live session-finished evidence hands off without invented duration: Expected values to be strictly equal: | + actual - expected<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic finished video bypasses only trailing optional assessment into next chapter: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| synthetic finished document bypasses only trailing optional assessment into next chapter: Expected values to be strictly equal: | + actual - expected<br>+ 'READING_DOCUMENT'<br>- 'NAVIGATION_COOLDOWN' |
+| synthetic live closure never closes an unrelated tab: Expected values to be strictly equal: | + actual - expected<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic assessment-only chapter defers without changing unfinished status: Expected "actual" to be strictly unequal to: | See first failure at left; no actual/expected diff supplied |
+| synthetic verification inside an optional assessment prevents handoff: Expected values to be strictly equal: | + actual - expected<br>+ 'NAVIGATION_COOLDOWN'<br>- 'BLOCKED' |
+| action settings within-lesson next video uses only nextVideo category: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| action settings navigation precedence nextLesson creates one timer and click: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| action settings navigation precedence nextChapter creates one timer and click: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| action settings navigation precedence assessment creates one timer and click: page.evaluate: TypeError: Cannot read properties of undefined (reading 'category') | See first failure at left; no actual/expected diff supplied |
+| action settings next document first step has one nextDocument delay: Expected values to be strictly equal: | + actual - expected<br>+ 'documentScroll'<br>- 'nextDocument' |
+| action settings live open and return are delayed once with no stacked catalog cooldown: Expected values to be strictly equal: | true !== false |
+| action settings cancellation user rejects stale callbacks: Expected values to be strictly equal: | 1 !== 0 |
+| action settings UI mounts compact, expands, validates and restores defaults: Expected values to be strictly equal: | 7 !== 11 |
+| action settings edits never restart a completed task: page.evaluate: TypeError: Cannot set properties of null (setting '__ended') | See first failure at left; no actual/expected diff supplied |
+| action settings disabling next chapter also cancels a pending assessment handoff: Expected values to be strictly equal: | 1 !== 0 |
+| action settings zero-delay document steps remain incremental and nonblocking: Expected values to be strictly deep-equal: | + actual - expected<br>+   100<br>-   0 |
+| repair A exact four video and PDF inventory waits only for selected readiness; owned UI nonblocking: Expected values to be strictly equal: | + actual - expected<br>+ 'unknown'<br>- 'pending' |
+| repair B missing-count does not prove full lesson complete: Expected values to be strictly equal: | + actual - expected<br>+ 'FINISHED'<br>- 'PLAYING' |
+| repair B missing-marker does not prove full lesson complete: Expected values to be strictly equal: | + actual - expected<br>+ 'WAITING_CREDIT'<br>- 'PLAYING' |
+| repair B document change invalidates prior credit before navigation: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'BLOCKED' |
+| repair B completed lesson uses shared navigation and rejects repeated completed identity: Expected values to be strictly equal: | + actual - expected<br>+ 'VERIFYING_PLATFORM_COMPLETION'<br>- 'BLOCKED' |
+| controls manual type hint retries BLOCKED once, respects type and stops without parallel playback: Expected values to be strictly equal: | + actual - expected<br>+ 'PAUSED_AUTOMATION'<br>- 'PLAYING' |
+| controls five-second navigation preview replaces legacy delay; stop and stale identity prevent clicks: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| controls delayed document rendering resumes bounded wait and credited reading gets navigation preview: Expected values to be strictly equal: | + actual - expected<br>+ 'WAITING_ATTACHMENT'<br>- 'WAITING_DOCUMENT' |
+| controls native approved-origin replay link opens only by explicit action; text-only cards stay unsupported: Expected values to be strictly equal: | 1 !== 0 |
+| credit marker-only text lesson advances without media; contradictory count prevents bypass: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| credit unknown text lesson observes delayed marker without inventing completion: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| lifecycle startup wait accepts delayed credit without waiting for media: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| resumption frame load keeps countdown; in-course route changes resume unfinished video: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| document continuity catalog replacement same: Expected values to be strictly equal: | + actual - expected<br>+ 'READING_DOCUMENT'<br>- 'NAVIGATION_COOLDOWN' |

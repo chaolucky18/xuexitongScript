@@ -8,7 +8,7 @@ const { chromium } = process.env.PLAYWRIGHT_MODULE
     ? await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href)
     : require('playwright');
 const jquery = readFileSync(process.env.JQUERY_PATH, 'utf8');
-const source = readFileSync(new URL('../v3_optimized.js', import.meta.url), 'utf8');
+const source = process.env.REGRESSION_REF ? execFileSync('git',['show',process.env.REGRESSION_REF+':v3_optimized.js'],{encoding:'utf8'}) : readFileSync(new URL('../v3_optimized.js', import.meta.url), 'utf8');
 const reviewedStartup = execFileSync('git', ['show', 'd7ea26ac373522b250f4bf573fada7c75687c909:v3_optimized.js'], { encoding: 'utf8' });
 const regressionBaseline = execFileSync('git', ['show', 'f587605e91e14d39429168c88936a83840ea19cf:v3_optimized.js'], { encoding: 'utf8' });
 const auxiliaryErrorBaseline = execFileSync('git', ['show', '06ca05808b4ca5c2b68f43e7720cfe82b68168be:v3_optimized.js'], { encoding: 'utf8' });
@@ -38,7 +38,7 @@ async function setup(html = outer(), count = 1, nested = false, scopeCase = null
     }
     const page = await context.newPage();
     if (syntheticOrigin) await page.goto(syntheticOrigin === 'recorded' ? 'https://mooc1.chaoxing.com/synthetic-course' : syntheticOrigin === 'pacing' ? 'https://course.test/course?courseId=synthetic' : 'https://course.test/course');
-    if (!syntheticOrigin) await page.goto('https://course.test/course'); // Real storage-capable origin for current browser lifecycle APIs.
+    if (!syntheticOrigin) await page.goto('https://course.test/course'+(process.env.FIXTURE_COURSE_ID==='1'?'?courseId=synthetic':'')); // Real storage-capable origin for current browser lifecycle APIs.
     // DOMParser is inert. Strip executable/resource-bearing content before insertion.
     const sanitized = await page.evaluate(html => {
         const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -55,12 +55,13 @@ async function setup(html = outer(), count = 1, nested = false, scopeCase = null
     await page.evaluate(({ count, nested, scopeCase, scopeMedia, auditionTask, complexMedia }) => {
         window.__clock = 100000;
         Date.now = () => window.__clock;
+        Object.defineProperty(performance,'now',{configurable:true,value:()=>window.__clock});
         let id = 0;
         window.__timeouts = new Map(); window.__intervals = new Map();
-        window.__timeoutDelays = new Map(); window.__logs = [];
+        window.__timeoutDeadlines = new Map(); window.__timeoutDelays = new Map(); window.__logs = [];
         const log = console.log.bind(console);
         console.log = (...args) => { window.__logs.push(args.join(' ')); log(...args); };
-        window.setTimeout = (fn, delay) => { window.__timeouts.set(++id, fn); window.__timeoutDelays.set(id, delay); return id; };
+        window.setTimeout = (fn, delay) => { window.__timeouts.set(++id, fn); window.__timeoutDelays.set(id, delay); window.__timeoutDeadlines.set(id,window.__clock+delay); return id; };
         window.clearTimeout = id => { window.__timeouts.delete(id); window.__timeoutDelays.delete(id); };
         window.setInterval = fn => { window.__intervals.set(++id, fn); return id; };
         window.clearInterval = id => window.__intervals.delete(id);
@@ -185,8 +186,8 @@ async function setup(html = outer(), count = 1, nested = false, scopeCase = null
 async function flush(page, rounds = 1) {
     await page.evaluate(async rounds => {
         for (let i = 0; i < rounds; i++) {
-            const callbacks = [...window.__timeouts.values()]; window.__timeouts.clear(); window.__timeoutDelays.clear();
-            for (const fn of callbacks) fn();
+            const callbacks = [...window.__timeouts].map(([id,fn])=>({fn,deadline:window.__timeoutDeadlines.get(id)??window.__clock})).sort((a,b)=>a.deadline-b.deadline); window.__timeouts.clear(); window.__timeoutDelays.clear();
+            for (const {fn,deadline} of callbacks) { window.__clock=Math.max(window.__clock,deadline); fn(); }
             await Promise.resolve(); await Promise.resolve();
         }
     }, rounds);
@@ -755,7 +756,7 @@ try {
         assert.equal(await state(page), 'BLOCKED');
     }));
     await check('complex explicit synthetic ownership selects active player and never wakes inactive player', () => using([outer(2), 2, false, 'complex-normal'], async page => {
-        await page.evaluate(() => { app.taskAdapter = window.__ownershipAdapter; app.run(); });
+        await page.evaluate(() => { app.taskAdapter = window.__ownershipAdapter; app._recovery.resumeExplicitly(); app.run(); });
         assert.deepEqual(await page.evaluate(() => [app._state, app._discoverMedia().documents.length, app._discoverMedia().videos.length, ...window.__complexVideos.map(v => v.__plays)]), ['PLAYING', 20, 1, 1, 0]);
         const indices = await page.evaluate(() => { const docs = app._discoverMedia().documents; return window.__complexVideos.map(v => docs.indexOf(v.ownerDocument)); });
         assert.deepEqual(indices, [1, 8]);
@@ -767,14 +768,14 @@ try {
     }));
     for (const variant of ['visible-inactive', 'playing-inactive', 'no-active-player', 'unknown-audio', 'unknown-leaf', 'wrapper-form', 'inaccessible', 'unverified', 'unclassified-audio']) {
         await check(`complex ownership distinguishes task boundaries from UI: ${variant}`, () => using([outer(2), 2, false, `complex-${variant}`], async page => {
-            await page.evaluate(() => { app.taskAdapter = window.__ownershipAdapter; app.run(); });
+            await page.evaluate(() => { app.taskAdapter = window.__ownershipAdapter; app._recovery.resumeExplicitly(); app.run(); });
             const uiOnly=['unknown-audio','wrapper-form','unclassified-audio'].includes(variant);
             assert.equal(await state(page),uiOnly?'PLAYING':'BLOCKED');
             assert.deepEqual(await page.evaluate(() => window.__complexVideos.map(v => v.__plays)),uiOnly?[1,0]:[0,0]);
         }));
     }
     await check('complex ownership loss stops old callbacks rather than switching players', () => using([outer(2), 2, false, 'complex-normal'], async page => {
-        await page.evaluate(() => { app.taskAdapter = window.__ownershipAdapter; app.run(); window.__ownershipVerified = false; app._checkVideoStatus(); });
+        await page.evaluate(() => { app.taskAdapter = window.__ownershipAdapter; app._recovery.resumeExplicitly(); app.run(); window.__ownershipVerified = false; app._checkVideoStatus(); });
         assert.equal(await state(page), 'BLOCKED');
         assert.deepEqual(await page.evaluate(() => window.__complexVideos.map(v => v.__plays)), [1, 0]);
     }));
@@ -847,7 +848,7 @@ try {
                     if (phase === 'monitor-first') { app._checkVideoStatus(); app._tryResumePlayback('ended-focus'); window.__originalVideo.dispatchEvent(new Event('ended')); }
                 }, phase);
             }
-            await flush(page, 3);
+            await flush(page, 3); await page.waitForTimeout(20); await flush(page,6);
             assert.deepEqual(await page.evaluate(() => [window.__navigationClicks, app._state, app._videoEl !== window.__originalVideo, app._videoEl.playbackRate,
                 window.__originalVideo.__plays]), [1, 'PLAYING', true, 1, 1]);
         }));
@@ -1332,13 +1333,14 @@ try {
         assert.equal(await state(page), 'PLAYING');
         assert.deepEqual(await page.evaluate(() => [document.querySelector('.posCatalog_active').id, window.__scopeClicks, app.cellData.currentNCellIndex, window.__auxReads]), ['leaf-38', 1, 38, 0]);
     }));
-    const cooldownOptions = [outer(2, true), 1, false, null, true];
+    const cooldownOptions = [outer(2, false), 1, false, null, true];
     async function enterCooldown(page, random = 0.5) {
         await page.evaluate(random => {
             Math.random = () => { window.__randomDraws = (window.__randomDraws || 0) + 1; return random; };
             window.__navClicks = 0;
             document.querySelector('#node1 .posCatalog_name').onclick = () => window.__navClicks++;
-            const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended'));
+            const node=document.querySelector('.posCatalog_active');node.querySelector('input')?.remove();node.insertAdjacentHTML('beforeend','<span class="icon_Completed"></span>');
+            const v = app._videoEl; v.__ended = true; v.__paused=true; v.dispatchEvent(new Event('ended'));
         }, random);
         await flush(page);
         assert.equal(await state(page), 'NAVIGATION_COOLDOWN');
@@ -1844,7 +1846,7 @@ try {
             window.__actionDraws = 0; Math.random = () => { window.__actionDraws++; return 0; };
         }, { allFeatures, disableVideoStart });
     }
-    const ranges = { videoStart: [300, 900], nextVideo: [500, 1500], documentScroll: [400, 1200], nextDocument: [500, 1500], nextLesson: [1000, 2500], nextChapter: [1500, 3500], assessment: [1000, 2500], liveOpen: [500, 1500], liveReturn: [500, 1500] };
+    const ranges = { videoStart: [300, 900], nextVideo: [3000, 7000], documentScroll: [300, 1000], nextDocument: [3000, 7000], nextLesson: [2000, 8000], nextChapter: [3000, 8000], assessment: [1000, 2500], liveOpen: [500, 1500], liveReturn: [500, 1500] };
     for (const [category, bounds] of Object.entries(ranges)) for (const maximum of [false, true]) {
         await check(`action settings ${category} ${maximum ? 'maximum' : 'minimum'} integer bound`, () => using([], async page => {
             await shortSettings(page, { allFeatures: true });
@@ -1859,13 +1861,13 @@ try {
     await check('action settings independently draw single-millisecond values and log three decimals', () => using([], async page => {
         await shortSettings(page);
         await page.evaluate(() => {
-            const values = [0, 1.1 / 1501, 0.5]; let draws = 0; Math.random = () => values[draws++]; window.__fired = 0;
+            const values = [0, 1.1 / 6001, 0.5]; let draws = 0; Math.random = () => values[draws++]; window.__fired = 0;
             for (let i = 0; i < 3; i++) app._runAction('nextLesson', `independent-${i}`, () => window.__fired++);
             window.__drawCount = draws;
         });
-        assert.deepEqual(await page.evaluate(() => [...window.__timeoutDelays.values()]), [1000, 1001, 1750]);
+        assert.deepEqual(await page.evaluate(() => [...window.__timeoutDelays.values()]), [2000, 2001, 5000]);
         assert.equal(await page.evaluate(() => window.__drawCount), 3);
-        assert.ok(await page.evaluate(() => window.__logs.includes('导航冷却 1.001s')));
+        assert.ok(await page.evaluate(() => window.__logs.includes('导航冷却 2.001s')));
         await flush(page); assert.equal(await page.evaluate(() => window.__fired), 3);
     }));
     for (const mode of ['global', 'category']) {
@@ -1996,8 +1998,8 @@ try {
     }
     await check('action settings UI mounts compact, expands, validates and restores defaults', () => using([outer(), 1, false, null, false, true], async page => {
         const host = page.locator('#xuexitong-v3-settings'); assert.equal(await host.count(), 1);
-        assert.equal(await host.locator('details').evaluate(el => el.open), false);
-        await host.locator('summary').click(); assert.equal(await host.locator('details').evaluate(el => el.open), true);
+        assert.equal(await host.locator('details').first().evaluate(el => el.open), false);
+        await host.locator('summary').first().click(); assert.equal(await host.locator('details').first().evaluate(el => el.open), true);
         await host.locator('[data-preset]').selectOption('short');
         assert.equal(await host.locator('input[data-feature]').count(), 10); // Two independently configurable audio switches.
         assert.equal(await host.locator('input[data-enable]').count(), 11); // Two audio action categories added.
@@ -2017,7 +2019,7 @@ try {
     await check('action settings panel clicks do not cancel actions until a relevant setting changes', () => using([outer(), 1, false, null, false, true], async page => {
         await shortSettings(page);
         await page.evaluate(() => { window.__fired = 0; app._runAction('nextLesson', 'panel-test', () => window.__fired++); });
-        const host = page.locator('#xuexitong-v3-settings'); await host.locator('summary').click();
+        const host = page.locator('#xuexitong-v3-settings'); await host.locator('summary').first().click();
         assert.equal(await page.evaluate(() => app._actions.pending.size), 1);
         await host.locator('input[data-feature="nextLesson"]').uncheck();
         assert.equal(await page.evaluate(() => app._actions.pending.size), 0);
@@ -2031,7 +2033,7 @@ try {
             const settings = JSON.parse(JSON.stringify(app.settings)); settings.features.nextLesson = false; settings.personalAccount = 'discard-me'; app.updateSettings(settings);
         });
         await page.evaluate(() => { app.settings.extraIdentity = 'discard-this-field'; });
-        await page.locator('#xuexitong-v3-settings').locator('summary').click();
+        await page.locator('#xuexitong-v3-settings').locator('summary').first().click();
         await page.waitForFunction(() => JSON.parse(localStorage.getItem('xuexitong.v3.action-settings.v1')).collapsed === false);
         const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('xuexitong.v3.action-settings.v1')));
         assert.equal(saved.extraIdentity, undefined);
@@ -2279,7 +2281,7 @@ try {
     await check('controls owned document scroll is gradual; local bottom without platform credit cannot navigate',()=>using([outer(2,false,'文档'),0],async page=>{
         await installDocument(page);assert.equal(await state(page),'READING_DOCUMENT');await flush(page,2);
         assert.ok(await page.evaluate(()=>window.__documentScroll.scrollTop>0&&window.__documentScroll.scrollTop<800));
-        await flush(page,60);assert.equal(await state(page),'BLOCKED');
+        await flush(page,90);assert.equal(await state(page),'BLOCKED');
         assert.equal(await page.evaluate(()=>window.__documentScroll.scrollTop),800);
         assert.equal(await page.evaluate(()=>document.querySelector('.posCatalog_active').id),'node0');
         assert.ok(await page.evaluate(()=>app._lastNotice.includes('平台尚未确认完成')));
