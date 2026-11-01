@@ -12,7 +12,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true });
 console.log(`ENV: Chrome ${browser.version()}; synthetic native handler/DOM; intercepted network; no authenticated platform.`);
 let passed = 0;
 const failures = [];
-async function setup({ delay = false, mutation = null, allowPopup = false } = {}) {
+async function setup({ delay = false, mutation = null, allowPopup = false, application = false } = {}) {
     const context = await browser.newContext({ serviceWorkers: 'block' });
     await context.route('**/*', route => route.abort());
     await context.route('https://mooc1.chaoxing.com/**', route => route.fulfill({ contentType: 'text/html', body: fixture }));
@@ -56,8 +56,18 @@ async function setup({ delay = false, mutation = null, allowPopup = false } = {}
         window.__openCalls = 0; const openWindow = window.open.bind(window);
         window.open = (...args) => { window.__openCalls++; return openWindow(...args); };
     }, { mutation, allowPopup });
+    if(application) await page.evaluate(() => {
+        history.replaceState({},'','?courseId=synthetic&chapterId=node0');
+        window.__gmStore=new Map();window.__gmListeners=new Map();let next=0;
+        window.GM_getValue=(key,fallback)=>structuredClone(window.__gmStore.get(key)??fallback);
+        window.GM_setValue=(key,value)=>{window.__gmStore.set(key,structuredClone(value));for(const [name,fn] of window.__gmListeners.values())if(name===key)fn();};
+        window.GM_deleteValue=key=>window.__gmStore.delete(key);
+        window.GM_addValueChangeListener=(key,fn)=>{window.__gmListeners.set(++next,[key,fn]);return next;};
+        window.GM_removeValueChangeListener=id=>window.__gmListeners.delete(id);
+        window.__closeCalls=0;window.close=()=>window.__closeCalls++;
+    });
     await page.addScriptTag({ content: source });
-    await page.evaluate(delay => {
+    await page.evaluate(({delay,application}) => {
         const createParent = window.__xuexitongTaskSupport.createParent;
         window.__xuexitongTaskSupport.createParent = options => {
             const controller = createParent(options); if (options.nativeEntry) window.__lastNative = controller; return controller;
@@ -67,6 +77,7 @@ async function setup({ delay = false, mutation = null, allowPopup = false } = {}
         window.__initialState = app._state;
         const settings = structuredClone(app.settings); settings.features.live = true; settings.randomDelaysEnabled = delay;
         settings.delays.liveOpen = { enabled: delay, minMs: 500, maxMs: 500 }; app.updateSettings(settings);
+        if(application){app.run();return;}
         // This historical suite specifies the manual-only fallback adapter.
         // Automatic native/GM opening is tested separately, not silently substituted.
         try { const entry=app._taskSet()?.tasks?.[0]?.element;
@@ -85,7 +96,7 @@ async function setup({ delay = false, mutation = null, allowPopup = false } = {}
                 window.__timeouts.delete(id);item.fn();
             }
         }
-    }, delay);
+    }, {delay,application});
     return { page, context };
 }
 async function check(name, options, fn) {
@@ -95,11 +106,25 @@ async function check(name, options, fn) {
     finally { await env?.context.close(); }
 }
 try {
+    await check('application run opens native handler once and establishes pending GM session without credit', {application:true}, async ({page,context}) => {
+        assert.equal(await page.evaluate(()=>app._state),'WAITING_LIVE');
+        const first=await page.evaluate(()=>GM_getValue('xtx-v34-native-session-v1'));
+        assert.equal(first.phase,'pending');assert.equal(first.seq,0);assert.equal(first.refreshUsed,false);
+        assert.deepEqual(await page.evaluate(()=>[window.__calls,window.__next,window.__closeCalls,app._platformCompletion]),[['relation-stub','native-anchor'],0,0,null]);
+        const status=page.locator('#xuexitong-v3-notice').locator('[role=status]');
+        assert.match(await status.textContent(),/等待.*配对|等待.*子页/);
+        await page.evaluate(()=>{app.run();app.play();app.nextUnit();});
+        assert.equal(await page.evaluate(()=>GM_getValue('xtx-v34-native-session-v1').id),first.id);
+        assert.deepEqual(await page.evaluate(()=>[window.__calls.length,window.__next,window.__closeCalls]),[2,0,0]);
+        assert.equal(context.pages().length,1);
+    });
     await check('built-in profile finds only the unique native card and leaves live disabled by default', {}, async ({ page }) => {
         assert.deepEqual(await page.evaluate(() => [window.__defaultLive, app._taskSet().tasks[0].element.ownerDocument === document.querySelector('#iframe').contentDocument, app._taskSet().tasks[0].nativeEntry]), [false, true, true]);
         assert.equal(await page.evaluate(() => window.__initialState), 'PAUSED_AUTOMATION');
         assert.equal(await page.evaluate(() => app._state), 'BLOCKED');
         assert.match(await page.evaluate(() => app._lastNotice), /手动|人工|核对/);
+        assert.match(await page.locator('#xuexitong-v3-notice').locator('[role=status]').textContent(),/手动|人工|核对/);
+        assert.match(await page.locator('#xuexitong-v3-settings').locator('[data-task-status]').textContent(),/不会自动推进|手动|人工/);
         assert.deepEqual(await page.evaluate(() => window.__calls), []);
     });
     await check('repeated discovery/run/events cannot invoke the original handler or open duplicate windows', {}, async ({ page, context }) => {
@@ -187,5 +212,5 @@ try {
         assert.deepEqual(result, ['manual-policy', 'noopener noreferrer']);
     });
 } finally { await browser.close(); }
-console.log(`RESULT: ${passed} passed; ${failures.length} failed. Synthetic entry/manual-fallback evidence only.`);
+console.log(`RESULT: ${passed} passed; ${failures.length} failed. Synthetic native entry/manual fallback and mocked-GM application evidence only.`);
 if (failures.length) process.exitCode = 1;

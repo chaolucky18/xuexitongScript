@@ -62,7 +62,7 @@ async function setup(html = outer(), count = 1, nested = false, scopeCase = null
         const log = console.log.bind(console);
         console.log = (...args) => { window.__logs.push(args.join(' ')); log(...args); };
         window.setTimeout = (fn, delay) => { window.__timeouts.set(++id, fn); window.__timeoutDelays.set(id, delay); window.__timeoutDeadlines.set(id,window.__clock+delay); return id; };
-        window.clearTimeout = id => { window.__timeouts.delete(id); window.__timeoutDelays.delete(id); };
+        window.clearTimeout = id => { window.__timeouts.delete(id); window.__timeoutDelays.delete(id); window.__timeoutDeadlines.delete(id); };
         window.setInterval = fn => { window.__intervals.set(++id, fn); return id; };
         window.clearInterval = id => window.__intervals.delete(id);
         window.__addVideos = (count, nested = false) => {
@@ -186,8 +186,13 @@ async function setup(html = outer(), count = 1, nested = false, scopeCase = null
 async function flush(page, rounds = 1) {
     await page.evaluate(async rounds => {
         for (let i = 0; i < rounds; i++) {
-            const callbacks = [...window.__timeouts].map(([id,fn])=>({fn,deadline:window.__timeoutDeadlines.get(id)??window.__clock})).sort((a,b)=>a.deadline-b.deadline); window.__timeouts.clear(); window.__timeoutDelays.clear();
-            for (const {fn,deadline} of callbacks) { window.__clock=Math.max(window.__clock,deadline); fn(); }
+            const callbacks = [...window.__timeouts].map(([id,fn])=>({id,fn,deadline:window.__timeoutDeadlines.get(id)??window.__clock})).sort((a,b)=>a.deadline-b.deadline);
+            for (const {id,fn,deadline} of callbacks) {
+                // Earlier callbacks may cancel a later callback in this batch.
+                if (!window.__timeouts.has(id)) continue;
+                window.clearTimeout(id); window.__clock=Math.max(window.__clock,deadline); fn();
+                await Promise.resolve(); await Promise.resolve();
+            }
             await Promise.resolve(); await Promise.resolve();
         }
     }, rounds);
@@ -201,8 +206,21 @@ async function using(options, fn) {
     const fixture = await setup(...options);
     try { await fn(fixture.page); } finally { await fixture.close(); }
 }
+// Test-only platform marker: deliberately separate from natural media ended.
+async function creditCurrentLesson(page) {
+    await page.evaluate(() => {
+        const current=document.querySelector('.posCatalog_active');
+        current.querySelectorAll('.jobUnfinishCount').forEach(el=>el.value='0');
+        if(!current.querySelector('.icon_Completed')) current.insertAdjacentHTML('beforeend','<span class="icon_Completed"></span>');
+    });
+}
 const state = page => page.evaluate(() => app._state);
 try {
+    await check('acceptance timer ordering preserves cancellation and defers newly queued callbacks',()=>using([],async page=>{
+        await page.evaluate(()=>{window.__timerOrder=[];let cancelled;setTimeout(()=>{window.__timerOrder.push('first');clearTimeout(cancelled);setTimeout(()=>window.__timerOrder.push('new'),1);},10);cancelled=setTimeout(()=>window.__timerOrder.push('cancelled'),20);});
+        await flush(page);assert.deepEqual(await page.evaluate(()=>window.__timerOrder),['first']);
+        await flush(page);assert.deepEqual(await page.evaluate(()=>window.__timerOrder),['first','new']);
+    }));
     async function diagnosticLesson(page, kind='video', variant='', automatic=true) {
         await page.evaluate(({html,kind,variant,automatic})=>{
             const root=document.querySelector('iframe[info="card"]').contentDocument;
@@ -339,6 +357,7 @@ try {
         await attachments(page);await page.evaluate(()=>{const a=document.querySelector('iframe').contentDocument.querySelector('audio');a.controls=false;a.className='preview';a.setAttribute('src','https://media.invalid/synthetic-preview');Object.defineProperty(a,'error',{get:()=>({code:4})});});
         for(let i=0;i<4;i++){await page.evaluate(i=>{const p=window.__attachmentVideos[i];p.__ended=true;p.__paused=true;p.dispatchEvent(new Event('ended'));},i);await flush(page,2);}
         assert.equal(await state(page),'PAUSED_AUTOMATION');assert.equal(await page.evaluate(()=>app._discoverMedia().tasks[4].status),'pending');
+        assert.deepEqual(await page.evaluate(()=>{const t=app._discoverMedia().tasks[4];return [t.platformCredit,app._processedTasks.has(t.element),app._platformCompletion===null];}),['unknown',false,true]);
         assert.equal(await page.evaluate(()=>document.querySelector('.posCatalog_active').id),'node0');
     }));
     for(const kind of ['video','audio']){
@@ -725,7 +744,7 @@ try {
             const loaded = new Promise(resolve => frame.addEventListener('load', resolve, { once: true }));
             document.body.append(frame); await loaded; window.__addVideos(1);
         });
-        await page.evaluate(() => { app.run(); for (const fn of window.__oldBootCallbacks) fn(); }); await flush(page, 3);
+        await page.evaluate(() => { app._recovery.resumeExplicitly(); app.run(); for (const fn of window.__oldBootCallbacks) fn(); }); await flush(page, 3);
         assert.deepEqual(await page.evaluate(() => [app._state, app._videoEl.__plays]), ['PLAYING', 1]);
         assert.equal(await bootRuns(page), 2);
     }));
@@ -823,6 +842,7 @@ try {
                 document.querySelector('.posCatalog_active').classList.remove('posCatalog_active');
                 document.querySelector('#node1').classList.add('posCatalog_active');
                 const frame = document.createElement('iframe'); frame.setAttribute('info', 'card');
+                window.__navigationLoad=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
                 document.querySelector('iframe[info="card"]').replaceWith(frame); window.__addVideos(1);
             });
         });
@@ -848,7 +868,7 @@ try {
                     if (phase === 'monitor-first') { app._checkVideoStatus(); app._tryResumePlayback('ended-focus'); window.__originalVideo.dispatchEvent(new Event('ended')); }
                 }, phase);
             }
-            await flush(page, 3); await page.waitForTimeout(20); await flush(page,6);
+            await flush(page, 3); await page.evaluate(()=>window.__navigationLoad); await flush(page,6);
             assert.deepEqual(await page.evaluate(() => [window.__navigationClicks, app._state, app._videoEl !== window.__originalVideo, app._videoEl.playbackRate,
                 window.__originalVideo.__plays]), [1, 'PLAYING', true, 1, 1]);
         }));
@@ -858,7 +878,7 @@ try {
     ], async page => {
         await prepareRerender(page);
         await page.evaluate(() => { window.__replaceCurrent(); window.__markCurrent(); window.__endOriginal(); });
-        await flush(page, 3);
+        await flush(page, 3); await page.evaluate(()=>window.__navigationLoad); await flush(page,6);
         assert.deepEqual(await page.evaluate(() => [app._state, window.__navigationClicks, window.__originalVideo.__plays, app._videoEl.playbackRate]), ['PLAYING', 1, 1, 1]);
     }));
     for (const failure of ['different-task', 'same-title-wrong-id', 'duplicate-id', 'ambiguous-active', 'wrong-chapter', 'player', 'document', 'url', 'no-node-key', 'no-chapter-key', 'mutated-node-key', 'mutated-chapter-key', 'topology-missing-key', 'topology-order', 'topology-group', 'topology-duplicate-key']) {
@@ -1015,12 +1035,13 @@ try {
         assert.equal(await state(page), 'BLOCKED');
         assert.equal(await page.evaluate(() => window.__clicks), 0);
     }));
-    await check('audition exception permits legitimate ended plus platform marker only', () => using([outer(1, true), 1, false, 'audition-match'], async page => {
+    await check('audition exception permits legitimate ended plus platform marker only', () => using([outer(1, false), 1, false, 'audition-match'], async page => {
+        await creditCurrentLesson(page);
         assert.equal(await state(page), 'PLAYING');
         await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         await flush(page); assert.equal(await state(page), 'FINISHED');
     }));
-    await check('audition classification is rechecked when previously inactive audio starts playing', () => using([outer(2, true), 1, false, 'audition-match'], async page => {
+    await check('audition classification is rechecked when previously inactive audio starts playing', () => using([outer(2, false), 1, false, 'audition-match'], async page => {
         await page.evaluate(() => {
             const audio = document.querySelector('iframe').contentDocument.querySelector('audio');
             Object.defineProperty(audio, 'paused', { get: () => false });
@@ -1042,9 +1063,10 @@ try {
         });
     }
     for (const count of [1, 3, 4]) {
-        await check(`synthetic ${count} videos: dynamic discovery, natural end, platform confirmation`, () => using([outer(1, true), count], async page => {
+        await check(`synthetic ${count} videos: dynamic discovery, natural end, platform confirmation`, () => using([outer(1, false), count], async page => {
             for (let i = 0; i < count; i++) {
                 assert.equal(await state(page), 'PLAYING');
+                if (i === count-1) await creditCurrentLesson(page);
                 await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
                 await flush(page);
             }
@@ -1067,7 +1089,8 @@ try {
         await page.evaluate(() => { document.querySelector('.jobUnfinishCount').remove(); document.querySelector('.posCatalog_active').insertAdjacentHTML('beforeend', '<span class="icon_Completed"></span>'); });
         await flush(page); assert.equal(await state(page), 'FINISHED');
     }));
-    await check('synthetic duplicate ended and monitor callbacks schedule one completion', () => using([outer(1, true)], async page => {
+    await check('synthetic duplicate ended and monitor callbacks schedule one completion', () => using([outer(1, false)], async page => {
+        await creditCurrentLesson(page);
         const result = await page.evaluate(() => {
             const v = app._videoEl; v.__ended = true;
             app._checkVideoStatus();
@@ -1105,7 +1128,7 @@ try {
         await page.evaluate(() => { document.querySelector('.prev_title').title = '本章自测'; app.play(); });
         await flush(page, 12); assert.equal(await state(page), 'BLOCKED');
     }));
-    await check('synthetic unsupported multi-tab completion stops', () => using([outer(1, true)], async page => {
+    await check('synthetic unsupported multi-tab completion stops', () => using([outer(1, false)], async page => {
         await page.evaluate(() => { document.body.insertAdjacentHTML('beforeend', '<div class="prev_list"><div class="prev_white">1</div><div class="prev_white">2</div></div>'); const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         await flush(page); assert.equal(await state(page), 'BLOCKED');
     }));
@@ -1123,23 +1146,25 @@ try {
         await page.evaluate(() => { document.querySelector('#coursetree ul ul').insertAdjacentHTML('beforeend', '<li><div class="posCatalog_select firstLayer"><span class="posCatalog_name">Group</span></div><ul><li><div class="posCatalog_select"><span class="posCatalog_name">Nested</span></div></li></ul></li>'); app._initCellData(); });
         assert.equal(await page.evaluate(() => app.cellData.nCells), 2);
     }));
-    await check('synthetic navigation target: lock, active-node change and new iframe required', () => using([outer(2, true)], async page => {
+    await check('synthetic navigation target: lock, active-node change and new iframe required', () => using([outer(2, false)], async page => {
+        await creditCurrentLesson(page);
         await page.evaluate(() => {
             window.__clicks = 0;
             document.querySelector('#node1 .posCatalog_name').onclick = () => {
                 window.__clicks++;
                 document.querySelector('#node0').classList.remove('posCatalog_active');
                 document.querySelector('#node1').classList.add('posCatalog_active');
-                const old = document.querySelector('iframe'); const frame = document.createElement('iframe'); frame.setAttribute('info', 'card'); old.replaceWith(frame); window.__addVideos(3);
+                const old = document.querySelector('iframe'); const frame = document.createElement('iframe'); frame.setAttribute('info', 'card'); window.__navigationLoad=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true})); old.replaceWith(frame); window.__addVideos(3);
             };
             const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); v.dispatchEvent(new Event('ended'));
         });
-        await flush(page);
+        await flush(page); await page.evaluate(()=>window.__navigationLoad); await flush(page,3);
         assert.equal(await page.evaluate(() => window.__clicks), 1);
         assert.equal(await state(page), 'PLAYING');
         assert.equal(await page.evaluate(() => document.querySelector('.posCatalog_active').id), 'node1');
     }));
-    await check('synthetic navigation not acknowledged: bounded stop', () => using([outer(2, true)], async page => {
+    await check('synthetic navigation not acknowledged: bounded stop', () => using([outer(2, false)], async page => {
+        await creditCurrentLesson(page);
         await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         await flush(page, 12); assert.equal(await state(page), 'BLOCKED');
     }));
@@ -1162,12 +1187,12 @@ try {
     await check('synthetic stall detection avoids repeated recovery', () => using([], async page => {
         assert.equal(await page.evaluate(() => { const v = app._videoEl; const before = v.__plays; app._checkVideoStatus(); window.__clock += 7100; app._checkVideoStatus(); app._checkVideoStatus(); return v.__plays - before; }), 1);
     }));
-    await check('synthetic destroy cancels callbacks and removes guards', () => using([outer(1, true)], async page => {
+    await check('synthetic destroy cancels callbacks and removes guards', () => using([outer(1, false)], async page => {
         await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); app.destroy(); });
         await flush(page, 12);
         assert.deepEqual(await page.evaluate(() => [app._timers.size, document.dispatchEvent(new Event('mouseleave', { cancelable: true }))]), [0, true]);
     }));
-    await check('synthetic conflict: positive unfinished count overrides completed icon', () => using([outer(1, true)], async page => {
+    await check('synthetic conflict: positive unfinished count overrides completed icon', () => using([outer(1, false)], async page => {
         await page.evaluate(() => { document.querySelector('.posCatalog_active').insertAdjacentHTML('beforeend', '<input class="jobUnfinishCount" value="1">'); const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         await flush(page, 12); assert.equal(await state(page), 'BLOCKED');
     }));
@@ -1179,7 +1204,7 @@ try {
         await page.evaluate(() => { const f = document.createElement('iframe'); document.querySelector('iframe').contentDocument.body.append(f); f.contentDocument.body.textContent = 'Unknown resource'; app.play(); });
         assert.equal(await state(page), 'PLAYING');
     }));
-    await check('synthetic user changes chapter before old completion', () => using([outer(2, true)], async page => {
+    await check('synthetic user changes chapter before old completion', () => using([outer(2, false)], async page => {
         await page.evaluate(() => { document.querySelector('#node0').classList.remove('posCatalog_active'); document.querySelector('#node1').classList.add('posCatalog_active'); const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         assert.equal(await state(page), 'BLOCKED');
     }));
@@ -1191,7 +1216,8 @@ try {
         assert.equal(await state(page), 'BLOCKED');
         assert.equal(await page.evaluate(() => app._checkInterval), null);
     }));
-    await check('synthetic video completion while navigation is pending is ignored', () => using([outer(2, true)], async page => {
+    await check('synthetic video completion while navigation is pending is ignored', () => using([outer(2, false)], async page => {
+        await creditCurrentLesson(page);
         await page.evaluate(() => { const v = app._videoEl; window.__old = v; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         await flush(page);
         assert.equal(await state(page), 'ADVANCING');
@@ -1205,30 +1231,33 @@ try {
         assert.equal(await state(page), 'PLAYING');
         assert.notEqual(await page.evaluate(() => app._checkInterval), null);
     }));
-    await check('synthetic course has chapters with 1/3/4 videos, one transition each', () => using([outer(1, true)], async page => {
+    await check('synthetic course has chapters with 1/3/4 videos, one transition each', () => using([outer(1, false)], async page => {
+
         await page.evaluate(() => {
             window.__chapter = 0; window.__transitions = 0;
             const root = document.querySelector('#coursetree > ul');
-            root.insertAdjacentHTML('beforeend', [1, 2].map(i => `<li><ul><li><div id="node${i}" class="posCatalog_select"><span class="posCatalog_name" title="Content ${i}">Content ${i}</span><span class="icon_Completed"></span></div></li></ul></li>`).join(''));
+            root.insertAdjacentHTML('beforeend', [1, 2].map(i => `<li><ul><li><div id="node${i}" class="posCatalog_select"><span class="posCatalog_name" title="Content ${i}">Content ${i}</span><input class="jobUnfinishCount" value="1"></div></li></ul></li>`).join(''));
             for (const i of [1, 2]) document.querySelector(`#node${i} .posCatalog_name`).onclick = () => {
                 window.__chapter = i; window.__transitions++;
                 document.querySelector('.posCatalog_active').classList.remove('posCatalog_active'); document.querySelector(`#node${i}`).classList.add('posCatalog_active');
-                const frame = document.createElement('iframe'); frame.setAttribute('info', 'card'); document.querySelector('iframe').replaceWith(frame); window.__addVideos([1, 3, 4][i]);
+                const frame = document.createElement('iframe'); frame.setAttribute('info', 'card'); window.__navigationLoad=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true})); document.querySelector('iframe').replaceWith(frame); window.__addVideos([1, 3, 4][i]);
             };
         });
         for (let i = 0; i < 8; i++) {
             assert.equal(await state(page), 'PLAYING');
+            if (await page.evaluate(()=>[...app._videoEl.ownerDocument.querySelectorAll('video')].filter(v=>!v.ended).length===1)) await creditCurrentLesson(page);
             await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
-            await flush(page);
+            await flush(page); await page.evaluate(()=>window.__navigationLoad); await flush(page,3);
         }
         assert.equal(await state(page), 'FINISHED');
         assert.equal(await page.evaluate(() => window.__transitions), 2);
     }));
-    await check('synthetic stale completion after player replacement cannot navigate', () => using([outer(1, true)], async page => {
+    await check('synthetic stale completion after player replacement cannot navigate', () => using([outer(1, false)], async page => {
         await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); v.remove(); window.__addVideos(1); });
         await flush(page); assert.equal(await state(page), 'BLOCKED');
     }));
-    await check('synthetic unrelated iframe update cannot acknowledge chapter navigation', () => using([outer(2, true)], async page => {
+    await check('synthetic unrelated iframe update cannot acknowledge chapter navigation', () => using([outer(2, false)], async page => {
+        await creditCurrentLesson(page);
         await page.evaluate(() => {
             document.querySelector('#node1 .posCatalog_name').onclick = () => {
                 document.querySelector('#node0').classList.remove('posCatalog_active'); document.querySelector('#node1').classList.add('posCatalog_active');
@@ -1251,7 +1280,7 @@ try {
         assert.equal(await page.evaluate(() => window.__unsafe), undefined);
         assert.equal(await page.locator('img').getAttribute('onerror'), null);
     }));
-    await check('synthetic content title changes during completion verification: stop', () => using([outer(1, true)], async page => {
+    await check('synthetic content title changes during completion verification: stop', () => using([outer(1, false)], async page => {
         await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); document.querySelector('.prev_title').title = 'Unknown content'; });
         await flush(page); assert.equal(await state(page), 'BLOCKED');
     }));
@@ -1354,21 +1383,23 @@ try {
             assert.equal(await page.evaluate(() => window.__navClicks), 1);
         }));
     }
-    await check('synthetic independent random draw for every eligible navigation', () => using([outer(4, true), 1, false, null, true], async page => {
+    await check('synthetic independent random draw for every eligible navigation', () => using([outer(4, false), 1, false, null, true], async page => {
+        await creditCurrentLesson(page);
         await page.evaluate(() => {
             const values = [0, 1 / 7001, 0.5]; window.__draws = 0;
             Math.random = () => values[window.__draws++];
             for (const index of [1, 2, 3]) document.querySelector(`#node${index} .posCatalog_name`).onclick = () => {
                 document.querySelector('.posCatalog_active').classList.remove('posCatalog_active'); document.querySelector(`#node${index}`).classList.add('posCatalog_active');
-                const f = document.createElement('iframe'); f.setAttribute('info', 'card'); document.querySelector('iframe[info="card"]').replaceWith(f); window.__addVideos(1);
+                const f = document.createElement('iframe'); f.setAttribute('info', 'card'); window.__navigationLoad=new Promise(resolve=>f.addEventListener('load',resolve,{once:true})); document.querySelector('iframe[info="card"]').replaceWith(f); window.__addVideos(1);
             };
         });
         const delays = [];
         for (let index = 0; index < 3; index++) {
+            await creditCurrentLesson(page);
             await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
             await flush(page);
             delays.push(await page.evaluate(() => [...window.__timeoutDelays.values()][0]));
-            await flush(page); assert.equal(await state(page), 'PLAYING');
+            await flush(page); await page.evaluate(()=>window.__navigationLoad); await flush(page,3); assert.equal(await state(page), 'PLAYING');
         }
         assert.deepEqual(delays, [5000, 5001, 8500]);
         assert.equal(await page.evaluate(() => window.__draws), 3);
@@ -1434,7 +1465,8 @@ try {
         assert.equal(await page.evaluate(() => window.__navClicks), 0);
         assert.notEqual(await state(page), 'ADVANCING');
     }));
-    await check('synthetic disabled cooldown navigates without drawing randomness', () => using([outer(2, true)], async page => {
+    await check('synthetic disabled cooldown navigates without drawing randomness', () => using([outer(2, false)], async page => {
+        await creditCurrentLesson(page);
         await page.evaluate(() => { Math.random = () => { throw new Error('disabled cooldown drew randomness'); }; window.__clicks = 0; document.querySelector('#node1 .posCatalog_name').onclick = () => window.__clicks++; const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         await flush(page); assert.equal(await page.evaluate(() => window.__clicks), 1);
     }));
@@ -1511,7 +1543,7 @@ try {
     await check('synthetic mixed document/video keeps video confirmation requirement', () => using([outer(2), 1, false, null, true], async page => {
         await page.evaluate(() => { app._isPlaying = false; });
         await installDocuments(page, 1, true);
-        for (let i = 0; i < 30 && await state(page) === 'READING_DOCUMENT'; i++) await flush(page);
+        for (let i = 0; i < 180 && await state(page) === 'READING_DOCUMENT'; i++) await flush(page);
         assert.equal(await state(page), 'PLAYING');
         await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         await flush(page, 12);
@@ -1553,8 +1585,9 @@ try {
     }));
     for (const nextChapter of [false, true]) {
         await check(`deferred consecutive assessments preserve next learning order; next chapter=${nextChapter}`, () => using([
-            `<div class="prev_title" title="视频"></div><div id="coursetree"><ul><li><ul>${node(0, true, true)}${['章节测验', '章节测试', '本章自测'].map((label, i) => `<li><div id="defer-${i}" class="posCatalog_select"><span class="posCatalog_name" title="${label}">${label}</span><input value="1"></div></li>`).join('')}${nextChapter ? '</ul></li><li><ul>' : ''}${node(1)}${node(2)}</ul></li></ul></div><iframe info="card"></iframe>`, 1, false, null, true,
+            `<div class="prev_title" title="视频"></div><div id="coursetree"><ul><li><ul>${node(0, true, false)}${['章节测验', '章节测试', '本章自测'].map((label, i) => `<li><div id="defer-${i}" class="posCatalog_select"><span class="posCatalog_name" title="${label}">${label}</span><input value="1"></div></li>`).join('')}${nextChapter ? '</ul></li><li><ul>' : ''}${node(1)}${node(2)}</ul></li></ul></div><iframe info="card"></iframe>`, 1, false, null, true,
         ], async page => {
+            await creditCurrentLesson(page);
             await page.evaluate(() => { window.__destinations = []; for (const i of [1, 2]) document.querySelector(`#node${i} .posCatalog_name`).onclick = () => window.__destinations.push(i); const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
             await flush(page);
             assert.equal(await state(page), 'NAVIGATION_COOLDOWN');
@@ -1779,7 +1812,7 @@ try {
     }));
     for (const kind of ['video', 'document']) {
         await check(`synthetic finished ${kind} bypasses only trailing optional assessment into next chapter`, () => using([
-            `<div class="prev_title" title="视频"></div><div id="coursetree"><ul><li><ul>${node(0, true, kind === 'video')}<li><div id="optional" class="posCatalog_select"><span class="posCatalog_name" title="章节测验">章节测验</span><input value="1"></div></li></ul></li><li><ul>${node(1)}</ul></li></ul></div><iframe info="card"></iframe>`,
+            `<div class="prev_title" title="视频"></div><div id="coursetree"><ul><li><ul>${node(0, true, false)}<li><div id="optional" class="posCatalog_select"><span class="posCatalog_name" title="章节测验">章节测验</span><input value="1"></div></li></ul></li><li><ul>${node(1)}</ul></li></ul></div><iframe info="card"></iframe>`,
             kind === 'video' ? 1 : 0, false, null, true,
         ], async page => {
             await page.evaluate(() => { window.__nextChapter = 0; document.querySelector('#node1 .posCatalog_name').onclick = () => window.__nextChapter++; });
@@ -1787,6 +1820,7 @@ try {
                 await installDocuments(page);
                 for (let i = 0; i < 40 && await state(page) === 'READING_DOCUMENT'; i++) await flush(page);
             } else {
+                await creditCurrentLesson(page);
                 await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); }); await flush(page);
             }
             assert.equal(await state(page), 'NAVIGATION_COOLDOWN');
@@ -1909,21 +1943,22 @@ try {
         await page.evaluate(() => app.play()); assert.equal(await page.evaluate(() => app._videoEl.__plays), 1);
         assert.equal(await state(page), 'PLAYING');
     }));
-    await check('action settings within-lesson next video uses only nextVideo category', () => using([outer(1, true), 3], async page => {
+    await check('action settings within-lesson next video uses only nextVideo category', () => using([outer(1, false), 3], async page => {
         await shortSettings(page, { disableVideoStart: true });
         await page.evaluate(() => { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); });
         await flush(page);
         assert.equal(await page.evaluate(() => app._actions.pending.get('video-start').category), 'nextVideo');
-        assert.deepEqual(await page.evaluate(() => [...window.__timeoutDelays.values()]), [500]);
+        assert.deepEqual(await page.evaluate(() => [...window.__timeoutDelays.values()]), [ranges.nextVideo[0]]);
         await flush(page); assert.equal(await state(page), 'PLAYING');
     }));
     for (const category of ['nextLesson', 'nextChapter', 'assessment']) {
         await check(`action settings navigation precedence ${category} creates one timer and click`, () => using([
             category === 'assessment' ? assessmentPage() : category === 'nextChapter'
-                ? '<div class="prev_title" title="视频"></div><div id="coursetree"><ul><li><ul>' + node(0, true, true) + '</ul></li><li><ul>' + node(1) + '</ul></li></ul></div><iframe info="card"></iframe>' : outer(2, true),
+                ? '<div class="prev_title" title="视频"></div><div id="coursetree"><ul><li><ul>' + node(0, true, false) + '</ul></li><li><ul>' + node(1) + '</ul></li></ul></div><iframe info="card"></iframe>' : outer(2, false),
             category === 'assessment' ? 0 : 1,
         ], async page => {
             await shortSettings(page, { disableVideoStart: true });
+            if(category!=='assessment') await creditCurrentLesson(page);
             await page.evaluate(category => {
                 window.__clickCount = 0; document.querySelector('#node1 .posCatalog_name').onclick = () => window.__clickCount++;
                 if (category === 'assessment') app.run(); else { const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); }
@@ -2002,10 +2037,10 @@ try {
         await host.locator('summary').first().click(); assert.equal(await host.locator('details').first().evaluate(el => el.open), true);
         await host.locator('[data-preset]').selectOption('short');
         assert.equal(await host.locator('input[data-feature]').count(), 10); // Two independently configurable audio switches.
-        assert.equal(await host.locator('input[data-enable]').count(), 11); // Two audio action categories added.
+        assert.equal(await host.locator('input[data-enable]').count(), 7); // nextContent unifies video/audio/document transitions; rest has its own controls.
         const min = host.locator('input[data-category="nextLesson"][data-bound="minMs"]');
         await min.fill('-1'); await min.dispatchEvent('change');
-        assert.equal(await page.evaluate(() => app.settings.delays.nextLesson.minMs), 1000);
+        assert.equal(await page.evaluate(() => app.settings.delays.nextLesson.minMs), ranges.nextLesson[0]);
         assert.ok((await host.locator('[data-status]').textContent()).includes('整数毫秒'));
         await min.fill('1137'); await min.dispatchEvent('change');
         assert.equal(await page.evaluate(() => app.settings.delays.nextLesson.minMs), 1137);
@@ -2044,7 +2079,8 @@ try {
         assert.equal(await page.evaluate(() => app.settings.features.nextLesson), false);
         assert.equal(await page.locator('#xuexitong-v3-settings').count(), 1);
     }));
-    await check('action settings edits never restart a completed task', () => using([outer(1, true)], async page => {
+    await check('action settings edits never restart a completed task', () => using([outer(1, false)], async page => {
+        await creditCurrentLesson(page);
         await page.evaluate(() => { window.__finishedVideo = app._videoEl; const v = app._videoEl; v.__ended = true; v.dispatchEvent(new Event('ended')); }); await flush(page);
         assert.equal(await state(page), 'FINISHED');
         const before = await page.evaluate(() => window.__finishedVideo.__plays);

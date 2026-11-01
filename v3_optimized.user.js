@@ -1780,7 +1780,12 @@
                     }
                     if (!snapshot && !media.pending && !media.unsupported && !media.inaccessible) this._attachmentSnapshot = {
                         root: media.tasks[0]?.lesson.root, id: catalog.current()?.id, tasks: media.tasks };
-                    for (const task of media.tasks) task.status = this._completedVideos.has(task.element) ? 'locally-ended' : this._attachmentCredit(task.element);
+                    for (const task of media.tasks) {
+                        // Execution readiness is not platform-completion evidence.
+                        task.platformCredit = this._attachmentCredit(task.element);
+                        task.status = this._completedVideos.has(task.element) ? 'locally-ended' :
+                            task.platformCredit === 'platform-completed' ? 'platform-completed' : 'pending';
+                    }
                 }
                 return media;
             },

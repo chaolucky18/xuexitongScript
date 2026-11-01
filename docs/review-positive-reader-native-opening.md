@@ -807,3 +807,206 @@ No test was suppressed to manufacture a PASS. Full raw logs stay local under
 | lifecycle startup wait accepts delayed credit without waiting for media: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
 | resumption frame load keeps countdown; in-course route changes resume unfinished video: Expected values to be strictly equal: | + actual - expected<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
 | document continuity catalog replacement same: Expected values to be strictly equal: | + actual - expected<br>+ 'READING_DOCUMENT'<br>- 'NAVIGATION_COOLDOWN' |
+
+### D1/D2/D3 status, startup and callback-contract repair (baseline 6ea9ca9)
+
+This entry supersedes neither the historical evidence nor the acceptance gate.
+The starting branch and remote were both verified at
+`6ea9ca9fbdb455dbddcabff950c0c889376c4331` after fetching the review branch.
+
+Production correction: `_discoverMedia()` now separates attachment execution
+state from platform-credit evidence. `videoAdapter.discover()` creates pending
+attachments, but the old enrichment assigned `_attachmentCredit(null)` to a PDF's
+status and overwrote pending with unknown. `task.platformCredit` now holds that
+independent evidence; an unexecuted item stays pending, genuine local-ended and
+verified platform-completed statuses retain their meanings. No pending/unknown
+item becomes completed. The status consumer is the inventory display;
+`_mediaDone`, `_attachmentCredit`, `_priorProof`, `_verifyExternal` and navigation
+eligibility remain the decision makers, unchanged. The pending-fifth-PDF test
+also asserts unknown platform credit, no processed-task entry and no whole-lesson
+completion authority.
+
+Exact source comparison against the starting commit, removing only the
+`_discoverMedia` method from both sides, passed. Therefore playback, audio
+fallback, fixed speed, document/knowledge-map readers, pacing, recovery,
+assessment policy, journal, sidebar/catalog handling and GM implementation are
+unchanged in Git-normalized source outside this declared boundary. The existing 27 frozen
+component comparisons also passed. The generated userscript is rebuilt from the
+source; metadata/grants are unchanged.
+
+Representative null-player investigation (temporary trace removed from tests):
+
+| Fixture before boot | Actual app state before expected selection | Discovery | First divergence / correction |
+| --- | --- | --- | --- |
+| One unique active node; completion icon present; unfinished input absent | VERIFYING_PLATFORM_COMPLETION; selected=false; playing=false; one timer; recovery=idle | One primary video; unsupported=false | `run -> _checkPriorCompletion` intentionally returns before `play/_getVideoEl`; it does not fail media recognition. Natural-playback fixtures now enter unfinished. Synthetic platform credit is introduced explicitly, independently of ended, and only before the final item ends in multi-video lessons |
+| Same completed entry in duplicate-ended and changed-lesson cases | Same VERIFYING_PLATFORM_COMPLETION and null selected player | Primary player still present and owned | The test dereferenced an intentionally unselected player. Correct the initial fixture, retain duplicate/stale-event assertions; do not disable the prior-credit shortcut |
+| Missing course iframe; unfinished input=1; no completion icon | WAITING_STARTUP; no player; one timer; recovery=idle | Zero media; unsupported=true while root absent | Bounded failure becomes terminal. A manual retry must call existing `resumeExplicitly()` before `run`; old boot callbacks still cannot act |
+
+No successful playback is fabricated: the existing simulated player still has
+to fulfill play, and original played-once, ended, platform-marker, competing
+media and stale-context assertions remain. Whole-lesson pre-completed shortcut
+fixtures are not globally changed. Future chapters in the 1/3/4-video test now
+start unfinished too; credit is introduced at their final media event only.
+
+Demonstrated timing defects were confined to test infrastructure:
+- Old flush copied all callbacks then removed every timer up front. An earlier
+  callback could no longer cancel a later copied callback. Flush now checks each
+  ID immediately before invocation and consumes it individually, preserving
+  deadline order, monotonic/wall-clock advancement and microtask progression.
+- Newly queued timers remain for the next flush round. A focused regression
+  proves an earlier callback cancels a later one and a new callback is deferred.
+- Synthetic course-frame replacement now awaits its actual load event before
+  exercising acknowledgement timers, including the nested audition case.
+- The mixed document/video fixture's 30-step budget predated elapsed traversal;
+  it now allows the current elapsed-time reader to finish, without changing the
+  reader or relaxing its later missing-platform-credit rejection.
+
+Proven obsolete expectations: nextVideo uses the canonical nextContent range
+(3000-7000ms), and the compact panel has seven visible delay categories rather
+than separate alias fields; an invalid nextLesson minimum preserves the current
+2000ms default, not the historic 1000ms. Safety-state expected strings were not
+bulk-replaced.
+
+Native integration now has a focused real application-entry test in addition to
+manual fallback factory tests. It invokes `app.run -> _openNativeLink ->
+gmLive.begin`, verifies one original native-handler invocation, a pending GM
+record with seq=0/refreshUsed=false, no navigation, no parent close attempt and
+no platform-completion record. Reentry retains the same pending session and
+does not reopen. GM storage and the native relation handler are synthetic stubs;
+this is not Tampermonkey or authenticated opening/child-completion evidence.
+Notice-panel and settings task-status text assertions are restored on the manual
+fallback path; the GM application test checks the pairing notice.
+
+Document fixture experiments using native wrappers did not establish equivalent
+viewer readiness and were reverted. Their failures are not called production
+reader regressions or silently converted into PASS. Unresolved reader/credit,
+assessment and state-machine cases are retained in the ledger below.
+
+
+#### Final complete-file run for this correction
+
+All nine files below ran after the last test correction, without TEST_FILTER,
+REGRESSION_REF, FIXTURE_COURSE_ID or temporary tracing. Node exit codes and
+results are retained locally under work/acceptance-followup-final outside Git.
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| node tests/preserved-v3.mjs | 0 | PASS: 27 frozen comparisons plus speed/partial veto |
+| node tests/verify-v3.mjs | 0 | PASS: syntax and generated payload synchronization |
+| node tests/customization-v3.mjs | 0 | PASS |
+| node tests/task-pacing-v3.mjs | 0 | RESULT: 6 focused synthetic pacing groups passed; not authenticated browser acceptance. |
+| node tests/bridge-v3.mjs | 0 | RESULT: 31 passed, 0 failed; mocked GM storage across openerless Chrome pages; one local WAV natural-ended case; no Tampermonkey or authenticated platform. |
+| node tests/gm-live-v3.mjs | 0 | RESULT: 10 focused GM lifecycle checks passed; mocked GM/tabs, not Tampermonkey acceptance. |
+| node tests/native-entry-v3.mjs | 0 | RESULT: 20 passed; 0 failed. Synthetic native entry/manual fallback and mocked-GM application evidence only. |
+| node tests/recorded-live-v3.mjs | 0 | RESULT: 21 passed; 0 failed. Synthetic browser evidence only. |
+| node tests/navigation-v3.mjs | 1 | RESULT: 490 passed, 46 failed; local Chrome DOM tests, simulated media/timers, no live platform. |
+
+Historical failures: 80. Resolved: 34. Still failing: 46.
+The navigation inventory is 536 cases (the original 535 plus one focused
+timer-cancellation regression). Native-entry is 20 cases (19 preserved plus
+one actual-app GM entry test). No historical behavioral case was removed.
+
+P1/F1/F2/F3/F4/O1 refer to the source and fixture evidence immediately above.
+For F1, completion markers are test-only explicit platform observations;
+they are not created by production code or inferred from missing media.
+The nextVideo category test also updates its obsolete 500ms bound to the
+current canonical 3000ms bound while preserving one-action assertions.
+
+Remaining E cases include attachment action categories, waiting/blocked
+recovery states, prior-credit fixture contracts, synthetic readers and
+live/assessment handoff timing. Their exact differences follow. A passing
+ownership/discovery helper or frozen comparison does not resolve them.
+No STATE assertion was broadened to an allowed set to hide a failure.
+
+STATUS: PARTIAL. Scoped source preservation passes; complete synthetic
+integration acceptance FAILS until the remaining failures are resolved.
+Authenticated Chaoxing/Tampermonkey acceptance is NOT RUN and remains PARTIAL.
+
+Build, source/generated syntax, changed-test syntax and diff checks passed.
+Private HTML remains excluded; only source, generated payload, the two test
+files and this existing review history are published.
+
+#### Exact reconciliation of all 80 prior failures
+
+| Historical test | Classification | Final result / first remaining difference |
+| --- | --- | --- |
+| permissive inactive preview with errors does not discard the pending fifth PDF | Proven production defect: pending/credit conflation (P1) | PASS; original safety assertions retained |
+| diagnostic ordered audio attachments honor independent nextAudio=true | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ undefined<br>- 'nextAudio' |
+| audio native primary and inactive secondary preserve fixed speed and marker-gated natural completion | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| multi-attachment document-only startup preserves disabled PDF as pending | Proven production defect: pending/credit conflation (P1) | PASS; original safety assertions retained |
+| sidebar assessment remains unanswered and unsupported live remains manual | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| multi-attachment inventory preserves ordered four videos and pending PDF | Proven production defect: pending/credit conflation (P1) | PASS; original safety assertions retained |
+| automatic startup has bounded failure and a safe manual retry without stale boot actions | Proven fixture defect: explicit terminal Resume (F3) | PASS; original safety assertions retained |
+| catalog rerender nested audition video survives leaf replacement without a chapter ID | Proven fixture defect: real iframe load (F2) | PASS; original safety assertions retained |
+| audition exception permits legitimate ended plus platform marker only | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| audition classification is rechecked when previously inactive audio starts playing | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| private sample-03: inert outer structure and safe fallback | Unresolved: insufficient evidence (E) | FAIL: The expression evaluated to a falsy value: |
+| private sample-04: inert outer structure and safe fallback | Unresolved: insufficient evidence (E) | FAIL: The expression evaluated to a falsy value: |
+| private sample-07: inert outer structure and safe fallback | Unresolved: insufficient evidence (E) | FAIL: The expression evaluated to a falsy value: |
+| private sample-08: inert outer structure and safe fallback | Unresolved: insufficient evidence (E) | FAIL: The expression evaluated to a falsy value: |
+| synthetic 1 videos: dynamic discovery, natural end, platform confirmation | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic 3 videos: dynamic discovery, natural end, platform confirmation | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic 4 videos: dynamic discovery, natural end, platform confirmation | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic duplicate ended and monitor callbacks schedule one completion | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic unsupported multi-tab completion stops | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic navigation target: lock, active-node change and new iframe required | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic navigation not acknowledged: bounded stop | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic destroy cancels callbacks and removes guards | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic conflict: positive unfinished count overrides completed icon | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic user changes chapter before old completion | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic video completion while navigation is pending is ignored | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic course has chapters with 1/3/4 videos, one transition each | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic stale completion after player replacement cannot navigate | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic unrelated iframe update cannot acknowledge chapter navigation | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic content title changes during completion verification: stop | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic large-directory completion advances leaf 37 to leaf 38 only | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'PLAYING' |
+| synthetic independent random draw for every eligible navigation | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic cooldown cancellation and stale callback: chapter | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| synthetic disabled cooldown navigates without drawing randomness | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic invalid cooldown range 7000/5000 safely blocks | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'VERIFYING_COMPLETION'<br>- 'BLOCKED' |
+| synthetic invalid cooldown range 1.5/12000 safely blocks | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'VERIFYING_COMPLETION'<br>- 'BLOCKED' |
+| synthetic invalid cooldown range 0/2147483648 safely blocks | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'VERIFYING_COMPLETION'<br>- 'BLOCKED' |
+| synthetic successful cooldown callback cannot navigate twice | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>0 !== 1 |
+| synthetic document scrolls incrementally from start to actual bottom without platform polling | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'READING_DOCUMENT'<br>- 'NAVIGATION_COOLDOWN' |
+| synthetic multiple documents finish locally then await navigation cooldown | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly deep-equal:<br>+   0,<br>+   0<br>-   600,<br>-   600 |
+| synthetic mixed document/video keeps video confirmation requirement | Proven fixture defect: elapsed traversal budget (F4) | PASS; original safety assertions retained |
+| synthetic ambiguous/mandatory assessment stops: 身份验证/true/true | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| synthetic ambiguous/mandatory assessment stops: 考试/true/true | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| synthetic ambiguous/mandatory assessment stops: 章节测验/true/false | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| deferred consecutive assessments preserve next learning order; next chapter=false | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| deferred consecutive assessments preserve next learning order; next chapter=true | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| recorded cross-origin popup late platform marker controls parent continuation | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic live ended: associated child closes, marker then cooldown, normal video resumes | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic live near-end: associated child closes, marker then cooldown, normal video resumes | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic blocked popup and cross-origin live entry never retry or advance | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'PAUSED_AUTOMATION'<br>- 'BLOCKED' |
+| synthetic true live session-finished evidence hands off without invented duration | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic finished video bypasses only trailing optional assessment into next chapter | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| synthetic finished document bypasses only trailing optional assessment into next chapter | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'READING_DOCUMENT'<br>- 'NAVIGATION_COOLDOWN' |
+| synthetic live closure never closes an unrelated tab | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'NAVIGATION_COOLDOWN'<br>- 'PLAYING' |
+| synthetic assessment-only chapter defers without changing unfinished status | Unresolved: insufficient evidence (E) | FAIL: Expected "actual" to be strictly unequal to:<br>'BLOCKED' |
+| synthetic verification inside an optional assessment prevents handoff | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'NAVIGATION_COOLDOWN'<br>- 'BLOCKED' |
+| action settings within-lesson next video uses only nextVideo category | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| action settings navigation precedence nextLesson creates one timer and click | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| action settings navigation precedence nextChapter creates one timer and click | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| action settings navigation precedence assessment creates one timer and click | Unresolved: insufficient evidence (E) | FAIL: page.evaluate: TypeError: Cannot read properties of undefined (reading 'category') |
+| action settings next document first step has one nextDocument delay | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'documentScroll'<br>- 'nextDocument' |
+| action settings live open and return are delayed once with no stacked catalog cooldown | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>true !== false |
+| action settings cancellation user rejects stale callbacks | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>1 !== 0 |
+| action settings UI mounts compact, expands, validates and restores defaults | Proven obsolete expectation: canonical UI/defaults (O1) | PASS; original safety assertions retained |
+| action settings edits never restart a completed task | Proven fixture defect: unfinished playback/explicit credit (F1) | PASS; original safety assertions retained |
+| action settings disabling next chapter also cancels a pending assessment handoff | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>1 !== 0 |
+| action settings zero-delay document steps remain incremental and nonblocking | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly deep-equal:<br>+   100<br>-   0 |
+| repair A exact four video and PDF inventory waits only for selected readiness; owned UI nonblocking | Proven production defect: pending/credit conflation (P1) | PASS; original safety assertions retained |
+| repair B missing-count does not prove full lesson complete | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'FINISHED'<br>- 'PLAYING' |
+| repair B missing-marker does not prove full lesson complete | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'WAITING_CREDIT'<br>- 'PLAYING' |
+| repair B document change invalidates prior credit before navigation | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'BLOCKED' |
+| repair B completed lesson uses shared navigation and rejects repeated completed identity | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'VERIFYING_PLATFORM_COMPLETION'<br>- 'BLOCKED' |
+| controls manual type hint retries BLOCKED once, respects type and stops without parallel playback | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'PAUSED_AUTOMATION'<br>- 'PLAYING' |
+| controls five-second navigation preview replaces legacy delay; stop and stale identity prevent clicks | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| controls delayed document rendering resumes bounded wait and credited reading gets navigation preview | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'WAITING_ATTACHMENT'<br>- 'WAITING_DOCUMENT' |
+| controls native approved-origin replay link opens only by explicit action; text-only cards stay unsupported | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>1 !== 0 |
+| credit marker-only text lesson advances without media; contradictory count prevents bypass | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| credit unknown text lesson observes delayed marker without inventing completion | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| lifecycle startup wait accepts delayed credit without waiting for media | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| resumption frame load keeps countdown; in-course route changes resume unfinished video | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
+| document continuity catalog replacement same | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'READING_DOCUMENT'<br>- 'NAVIGATION_COOLDOWN' |
