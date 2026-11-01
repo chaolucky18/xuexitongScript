@@ -11,6 +11,8 @@ export async function requestAnswers(questions, apiKey, fetchImpl = fetch) {
         const body = {
             model: 'deepseek-flash',
             stream: false,
+            // Omitting this field enables thinking by default on DeepSeek Flash.
+            thinking: {type: 'disabled'},
             response_format: {type: 'json_object'},
             ...settings,
             messages: [

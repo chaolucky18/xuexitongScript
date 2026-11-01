@@ -29,7 +29,8 @@ function response(body, status = 200) {
     });
     assert.equal(answers.length, 4);
     assert.equal(bodies.length, 1);
-    assert.equal(bodies[0].thinking, undefined, 'Normal answers must not enable costly thinking output');
+    assert.deepEqual(bodies[0].thinking, {type: 'disabled'},
+        'Thinking is enabled by default by the API, so answer requests must explicitly disable it');
     assert.ok(bodies[0].max_tokens <= 3000, 'Answer-only JSON needs a compact token budget');
 }
 
