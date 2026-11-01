@@ -1204,6 +1204,7 @@
                 this._state = 'DISCOVERING';
                 this._isPlaying = false;
                 this._completedVideos = new WeakSet();
+                this._failedAudioPlayers = new WeakSet(); this._audioFailureScope = null; this._audioUnresolved = null;
                 this._attachmentSnapshot = null;
                 this._processedTasks = new WeakSet();
                 this._externalCompletion = null;
@@ -2093,13 +2094,18 @@
                 this._state = 'WAITING_ATTACHMENT'; this._notify('已知附件正在加载，最多等待10秒'); this._schedule(tick, 250);
             },
             _discoverAttachmentTask() {
+                if (this._audioUnresolved && !this._audioFailureScope) {
+                    this._audioStopUnresolved('失败音频没有可验证的后续附件范围'); return true;
+                }
                 const media = this._playableMedia();
                 if(media.partialWaiting){this._waitPartialTasks();return true;}
                 if (!media.tasks) return null;
                 if (this._classifyAttachmentReadiness(media) === 'loading') { this._waitForAttachmentReadiness(); return true; }
                 if (media.pending && (!media.unsupported || media.localReadinessEligible) && !media.inaccessible) { this._waitForStartup(); return true; }
                 if ((media.unsupported && !media.localExecutionEligible) || media.inaccessible) { this._block((media.tasks?.find(task => task.executable === false)?.reason || '附件清单无法验证') + '：' + (media.reasons || []).filter(code => /^[a-z][a-z0-9-]{0,63}$/.test(code)).slice(0,5).join('、')); return true; }
-                const pending = media.tasks.find(task => task.kind === 'document' ? !this._processedTasks.has(task.attachment) : !this._mediaDone(task.element));
+                const pending = this._audioFailureScope ? this._audioFollowingTask(media) :
+                    media.tasks.find(task => task.kind === 'document' ? !this._processedTasks.has(task.attachment) : !this._mediaDone(task.element));
+                if (this._audioFailureScope && !pending) return true;
                 if (pending?.kind === 'document') {
                     const scope = this._taskSet();
                     if (scope?.tasks.some(task => task.kind === 'document' && task.element === pending.attachment)) return pending;
@@ -2574,6 +2580,7 @@
             },
             _clearAudioNotice() {
                 const state = this._audioState;
+                state?.readinessCancel?.();
                 if (state) state.el.removeEventListener('volumechange', state.listener);
                 this._audioNotice?.remove(); this._audioNotice = null; this._audioState = null;
             },
@@ -2594,7 +2601,7 @@
                     if (state === this._audioState && state.generation === this._generation && this._state === 'AUDIO_STARTING')
                         this._block('音频任务或自动播放设置已变化，静音重试已取消');
                 };
-                if (!valid() || el.ended || state.fallbackPending) return;
+                if (!valid() || el.ended || state.fallbackPending || state.exhausted || state.readinessCancel) return;
                 if (error?.name === 'NotAllowedError' && !state.mutedFallbackUsed) {
                     state.mutedFallbackUsed = true; state.fallbackPending = true;
                     this._state = 'AUDIO_STARTING'; this._isPlaying = false; this._playPending = true;
@@ -2616,9 +2623,103 @@
                         });
                     return;
                 }
-                state.waiting = true; state.error = error?.name || '播放失败';
-                this._state = 'WAITING_AUDIO_GESTURE'; this._isPlaying = false; this._clearCheckInterval(); this._renderAudioNotice();
-                this._notify('音频自动播放失败，已停止；可选用音频按钮手动恢复，不会跳过任务', '执行失败');
+                if (error?.name !== 'NotAllowedError' && el.readyState < 2 && !el.error && !state.readinessUsed) {
+                    state.readinessUsed = true; state.waiting = true;
+                    this._state = 'WAITING_MEDIA'; this._isPlaying = false; this._clearCheckInterval();
+                    const deadline = Date.now() + 5000;
+                    let timer, cancelled = false;
+                    const cleanup = () => {
+                        cancelled = true; clearTimeout(timer); this._timers.delete(timer);
+                        el.removeEventListener('canplay', tick); el.removeEventListener('loadeddata', tick);
+                        for (const type of ['pagehide','beforeunload','popstate','hashchange']) window.removeEventListener(type, invalidated);
+                        state.readinessCancel = null;
+                    };
+                    const invalidated = () => { cleanup(); this._audioStopUnresolved('音频等待期间页面已变化'); };
+                    const tick = () => {
+                        if (cancelled) return;
+                        clearTimeout(timer); this._timers.delete(timer);
+                        if (!valid() || el.ended) return invalidated();
+                        if (el.error || Date.now() >= deadline) {
+                            cleanup(); this._audioExhausted(el, el.error ? 'media-error' : 'readiness-timeout'); return;
+                        }
+                        if (el.readyState >= 2) {
+                            cleanup(); state.waiting = false; state.mutedFallbackUsed = false;
+                            el.muted = false; this._playPending = false; this._state = 'READY'; this.play(true); return;
+                        }
+                        timer = setTimeout(tick, 250); this._timers.add(timer);
+                    };
+                    state.readinessCancel = cleanup;
+                    el.addEventListener('canplay', tick); el.addEventListener('loadeddata', tick);
+                    for (const type of ['pagehide','beforeunload','popstate','hashchange']) window.addEventListener(type, invalidated);
+                    this._notify('音频暂未就绪，等待一次就绪恢复（最多 5 秒）'); tick(); return;
+                }
+                this._audioExhausted(el, error?.name || 'playback-rejected');
+            },
+            _audioStopUnresolved(reason) {
+                this._recovery?.cancel('audio-unresolved'); this.stopAutomation();
+                this._videoEl = null; this._videoContext = null;
+                this._notify(`音频未解决：${reason}；保留未完成状态，不会因此离开当前小节`, '执行失败');
+            },
+            _audioExhausted(el, category) {
+                const state = this._audioState;
+                if (el?.tagName !== 'AUDIO' || !state || state.el !== el || state.exhausted || state.generation !== this._generation) return;
+                state.exhausted = true; state.readinessCancel?.();
+                this._failedAudioPlayers ||= new WeakSet(); this._failedAudioPlayers.add(el);
+                this._audioUnresolved = { player: el, category, generation: this._generation };
+                this._clearCheckInterval(); this._playPending = false; this._isPlaying = false;
+                const media = this._playableMedia(), node = catalog.current();
+                if (this._partialSession) return this._audioStopUnresolved('活动 partial session 的选择策略受保护，失败音频不能跨越');
+                const index = media.tasks?.findIndex(task => task.kind === 'audio' && task.element === el) ?? -1;
+                if (index < 0 || !this._refreshVideoContext()) return this._audioStopUnresolved(category + '，音频归属无法验证');
+                if (!this._audioFailureScope) this._audioFailureScope = { node, id: node?.id, course: pacingCourse(window), generation: this._generation,
+                    title: this._currentStepTitle(), name: this._nodeTitle(node), topology: this._catalogTopology(), href: location.href,
+                    root: videoAdapter.cardDocument(), frame: videoAdapter.cardFrame(), snapshot: this._attachmentSnapshot,
+                    tasks: media.tasks.map(task => ({ ...task, source: task.element?.currentSrc || task.element?.getAttribute('src') || '' })) };
+                this._audioFailureScope.index = index;
+                this._audioFailureScope.tasks[index].audioFailure = category;
+                this._detachVideoEvents(); this._videoEl = null; this._videoContext = null;
+                this._manualPermit = null; this._manualBusy = false;
+                if (!this._audioFollowingTask(media)) return;
+                this._nextVideoRequested = true; this._state = 'READY'; this.play();
+            },
+            _audioFollowingTask(media) {
+                const r = this._audioFailureScope, node = catalog.current();
+                const refuse = reason => { this._audioStopUnresolved(reason); return null; };
+                if (r && r.generation !== this._generation) {
+                    const doc = this._externalCompletion;
+                    if (doc?.kind !== 'document' || !doc.localDone || doc.generation !== this._generation || !this._taskContextValid(doc))
+                        return refuse('音频失败后的执行代次已失效');
+                    r.generation = this._generation; // Only the existing verified document handoff may change generation.
+                }
+                if (!r || this._partialSession || !r.course || r.course !== pacingCourse(window) || node !== r.node || !node?.id || node.id !== r.id ||
+                    [...document.querySelectorAll('[id]')].filter(el => el.id === r.id).length !== 1 ||
+                    this._nodeTitle(node) !== r.name || this._currentStepTitle() !== r.title || !r.topology || this._catalogTopology() !== r.topology ||
+                    location.href !== r.href || videoAdapter.cardDocument() !== r.root || videoAdapter.cardFrame() !== r.frame ||
+                    !r.snapshot || this._attachmentSnapshot !== r.snapshot || media.inaccessible || media.unsupported || media.pending || this._verificationPresent())
+                    return refuse('当前归属、课节或附件范围不再安全');
+                if (media.tasks?.length !== r.tasks.length || !media.tasks.every((t,i) => {
+                    const old = r.tasks[i];
+                    return t.kind === old.kind && t.attachment === old.attachment && t.element === old.element && t.document === old.document &&
+                        t.documents.length === old.documents.length && t.documents.every((doc,j) => doc === old.documents[j]) &&
+                        (t.element?.currentSrc || t.element?.getAttribute('src') || '') === old.source;
+                })) return refuse('附件身份、来源或顺序已变化');
+                const failed = media.tasks[r.index];
+                if (failed?.kind !== 'audio' || !this._failedAudioPlayers.has(failed.element) ||
+                    media.tasks.some(t => this._failedAudioPlayers.has(t.element) && (!t.element.paused || t.element.seeking || t.element.ended)))
+                    return refuse('失败音频不再是可确认的停止状态');
+                for (const task of media.tasks.slice(r.index + 1)) {
+                    if (!['audio','video','document'].includes(task.kind) || task.executable === false) return refuse('后续附件不支持独立执行');
+                    if (task.kind === 'document' ? this._processedTasks.has(task.attachment) : this._mediaDone(task.element)) continue;
+                    if (task.kind === 'document') {
+                        const scope = this._taskSet();
+                        if (!this.settings.features.document || !scope?.validateScope() || !scope.tasks.some(t => t.kind === 'document' && t.element === task.attachment && t.viewer))
+                            return refuse('后续文档未启用或缺少已验证的阅读适配器');
+                    } else if (!task.element || (!task.element.paused && task.element !== this._videoEl) || task.element.seeking || task.element.ended ||
+                        !this.settings.features[task.kind === 'audio' ? 'audioPlayback' : 'videoPlayback'] ||
+                        ((!this._isPlaying || this._videoEl !== task.element) && !this.settings.features[task.kind === 'audio' ? 'nextAudio' : 'nextVideo'])) return refuse('后续媒体未启用或正在活动');
+                    return task;
+                }
+                return refuse('没有可安全执行的后续附件');
             },
             _renderAudioNotice() {
                 const state = this._audioState, el = state?.el;
@@ -3031,6 +3132,12 @@
                     return null;
                 }
                 const tasks = this._playableMedia();
+                if (this._audioUnresolved) {
+                    const next = this._audioFollowingTask(tasks);
+                    if (!next || next.kind === 'document') return null;
+                    if (this._videoEl !== next.element) { this._detachVideoEvents(); this._videoEl = next.element; }
+                    return this._videoEl;
+                }
                 if (tasks.inaccessible || (tasks.unsupported && !tasks.localExecutionEligible)) {
                     if (this._state !== 'BLOCKED') this._block('存在不可访问或不支持的媒体组件');
                     return null;

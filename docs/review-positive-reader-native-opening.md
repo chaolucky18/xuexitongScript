@@ -1010,3 +1010,108 @@ files and this existing review history are published.
 | lifecycle startup wait accepts delayed credit without waiting for media | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
 | resumption frame load keeps countdown; in-course route changes resume unfinished video | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'ADVANCING'<br>- 'NAVIGATION_COOLDOWN' |
 | document continuity catalog replacement same | Unresolved: insufficient evidence (E) | FAIL: Expected values to be strictly equal:<br>+ 'READING_DOCUMENT'<br>- 'NAVIGATION_COOLDOWN' |
+
+### Bounded unattended audio failure recovery (baseline be35bec)
+
+STATUS: PARTIAL pending authenticated Chrome/Chaoxing retesting. This is the
+scoped audio correction, not a reopening of the historical 46-failure project.
+Local and fetched remote review HEAD were both verified as
+`be35bec5a4473a92139f98577bd8d65912f60838` before editing.
+
+Canonical source: `D:\xuexitongScript-master\v3_optimized.js`.
+Canonical installable: `D:\xuexitongScript-master\v3_optimized.user.js`.
+The installable was regenerated only by `node scripts/build-userscript.mjs`.
+Its actual disk SHA-256 after generation:
+`CB74E06C58F6D68C8C4F75C6A006E6FDF9BE5799948EC5669237B4C3FF5CBAB0`.
+No alternate production source, installable, backup or output directory was
+created. The separate optional `xuexitong-live-bridge.user.js` is unchanged.
+
+Authorized changes:
+- `run()` initializes per-attempt `_failedAudioPlayers`, failure scope and latest
+  diagnostic record. Confirmed lesson transitions already reenter this run path.
+- `_audioPlayRejected()` retains the original audible-first/one-time muted
+  fallback block. A non-policy rejection with readyState < 2 and no MediaError
+  may wait once for canplay/loadeddata or 250ms checks, with a 5000ms wall deadline.
+  The sole new ready retry uses normal `play(true)` and may use one muted fallback
+  if that fresh audible attempt receives NotAllowedError. No load(), seek,
+  synthetic click, server update, repeated policy timer or automatic unmute of
+  successful muted playback is introduced.
+- Readiness cleanup removes timers/listeners on Stop, source/element/document,
+  route/generation or feature invalidation. `_clearAudioNotice()` invokes that
+  audio-specific cleanup as part of existing cancellation.
+- Exhaustion records the exact player and rejection category. A WeakSet is not
+  completion authority; captured inventory entries retain each failed audio's
+  category. Failure never enters completed/processed sets or pacing counts.
+- Audio-only hooks in `_discoverAttachmentTask()` and `_getVideoEl()` consider
+  following native inventory items only after an exhausted owned audio. Empty
+  failure scope follows the exact prior selection/dispatch code. Later items
+  use the unchanged normal audio/video start path or verified document adapter.
+- `_audioStopUnresolved()` cancels recovery observation and uses existing Stop
+  cleanup, clears stale playback context and shows a nonblocking unresolved
+  notice. It never calls nextUnit(). Native player controls and the existing
+  explicit Resume/re-detect control remain optional recovery; no click is needed
+  for automatic muted fallback or the readiness cycle.
+
+Continuation requires the same unique lesson/course/topology, URL, card frame
+and root, an unchanged captured attachment snapshot, exact ordered owners,
+players/documents and sources, and paused/non-seeking/non-ended failed players.
+Unknown/inaccessible/ambiguous/active content, reordered/replaced inventories,
+missing course identity, disabled features and unverified document viewers stop
+continuation. No catalog click is authorized by failure. Natural completion of a
+later player still cannot turn the first failed player into completed content.
+An explicit fresh run may retry; an existing whole-lesson-credit shortcut retains
+its original independent validation, rather than using failure records.
+
+Protected dependency: when an actual partial session is active, exhaustion stops
+instead of adding a second selection policy. Its durable pause marker remains;
+continuation there would require ChatGPT to authorize changes to `_partialSelect`
+or its plan invariants. No such changes were made. A standalone audio without a
+verified ordered native inventory also stops rather than guessing a later task.
+
+Preservation evidence in `tests/audio-failure-v3.mjs`: exact source equality to
+be35bec outside the explicitly authorized functions; exact run/cleanup bodies
+after removing their single initialization/cleanup hooks; exact normal selector
+and attachment dispatcher after removing the failure-specific hooks; and exact
+original one-time muted-fallback block. Protected completion functions, ordinary
+video, successful audio setup/monitoring, document/knowledge-map readers,
+partial-session policy, pacing, journal, navigation, GM and live bridge are not
+edited. No existing regression test or expectation was changed.
+
+Observed commands/results (existing Playwright/JQUERY_PATH environment):
+
+| Command | Observed result |
+| --- | --- |
+| `node tests/audio-failure-v3.mjs` | 27 focused Chrome cases PASS plus frozen-source/fallback comparisons |
+| `node tests/navigation-v3.mjs` with the playback/completion filter below | 14 PASS / 0 FAIL |
+| `node tests/navigation-v3.mjs` with `TEST_FILTER=^audio bounded fallback promise` | 2 PASS / 0 FAIL |
+| Final combined playback/completion filter plus pending-fallback tests | 16 PASS / 0 FAIL on final source |
+| `node tests/customization-v3.mjs` | PASS: fixed speed, assessment detection and unknown-content VM checks |
+| `node tests/task-pacing-v3.mjs` | PASS: six pacing groups plus recovery, reader and journal checks |
+| `node tests/gm-live-v3.mjs` | 10 focused lifecycle checks PASS |
+| `node scripts/build-userscript.mjs` and `node tests/verify-v3.mjs` | PASS: canonical payload/metadata synchronization and syntax |
+| `node --check tests/audio-failure-v3.mjs` and `git diff --check` | PASS |
+
+Playback/completion filter used:
+`^synthetic (fixed normal rate|blur/visibilitychange|unexpected pause|stall detection|muted fallback|completion absent|delayed platform completion)|^audio automatic readiness|^repair C audible initial|^composable dispatcher (audio -> video|audio -> document|video -> unknown -> audio -> document -> video)$`
+
+New cases cover audible success; exactly one muted policy fallback; bounded dual
+rejection; one ready-event retry and fresh policy fallback; no second readiness
+cycle; timeout; Stop/route/source/element/owner/generation/feature cancellation;
+owned following audio/video once; unresolved first media after genuine later
+ended; unknown/inaccessible/reordered/partial/disabled boundaries; explicit fresh
+run; multiple failed identities/categories; the existing native document reader;
+Stop/reentry generation rejection, verified post-document generation handoff,
+and genuine ended plus independently supplied synthetic platform marker.
+The unknown independent fixture is classified by the existing partial planner
+and ends paused; inaccessible/reordered inventory stops at existing global
+blocking. These are explicit boundary outcomes, not weakened legacy assertions.
+
+All browser media, errors and permission outcomes are simulated. Tests establish
+neither actual browser autoplay policy nor authenticated credit. The full
+historical suite was intentionally not rerun; its prior 46 failures are not
+claimed resolved or unchanged in count. Older tests requiring final
+WAITING_AUDIO_GESTURE and the historical whole-audio-handler equality are not
+acceptance criteria for this authorized unattended failure contract; their files
+are retained unchanged. This delivery uses the focused cases and explicit frozen
+boundaries above, and remains ready for independent ChatGPT source review and
+user real-platform testing, not authenticated acceptance.
