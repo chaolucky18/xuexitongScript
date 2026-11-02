@@ -57,11 +57,19 @@ try {
    src(next){switched=next;video.error=null;return this},play(){plays++;return Promise.resolve()}};
   videoDoc.defaultView.videojs={players:{video:player}};
   video.error={code:4,message:'PIPELINE_ERROR_READ'};
-  docs.body.insertAdjacentHTML('beforeend','<div class="vjs-error-display vjs-modal-dialog"><p>无法播放媒体。</p><label><input type="radio" name="ans-vjserrdisplay-opt" disabled>公网1</label><label><input type="radio" name="ans-vjserrdisplay-opt">公网2</label><label><input type="radio" name="ans-vjserrdisplay-opt">本校</label></div>');
+  videoDoc.body.insertAdjacentHTML('beforeend','<div class="vjs-error-display vjs-modal-dialog"><div class="ans-vjserrdisplay"><p>无法播放媒体。</p><label><input type="radio" name="ans-vjserrdisplay-opt" disabled>公网1</label><label><input type="radio" name="ans-vjserrdisplay-opt">公网2</label><label><input type="radio" name="ans-vjserrdisplay-opt">本校</label></div></div>');
   assert.equal(w.__xuexitongDeepSeekReview.recoverVideoLine(),true);
   assert.equal(switched.src,'https://s1.cldisk.com/sv-s1/video/34/example/sd.mp4?token=test','Media error must switch to the next enabled line');
   assert.equal(video.error,null,'Recovered source should clear the failed media state');
-  console.log('PASS: built userscript recovers a failed media line');
+  Object.defineProperty(video,'paused',{get:()=>false});
+  Object.defineProperty(video,'readyState',{value:4});
+  const playsAfterSwitch=plays;
+  w.__xuexitongDeepSeekReview.scan();
+  assert.match(w.document.querySelector('#xuexitong-deepseek-review-panel').textContent,/视频已恢复播放/);
+  w.__xuexitongDeepSeekReview.scan();
+  assert.doesNotMatch(w.document.querySelector('#xuexitong-deepseek-review-panel').textContent,/视频播放失败/);
+  assert.equal(plays,playsAfterSwitch,'Retained error markup must not restart a recovered video');
+  console.log('PASS: built userscript clears failure status after media recovery');
  }else if(scenario==='iframe-replaced') {
   // A retired iframe document can keep connected video nodes even after navigation.
   const retired=w.document.implementation.createHTMLDocument('retired');

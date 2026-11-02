@@ -72,7 +72,8 @@ function setup() {
     let status = '';
     let clock = 0;
     const core = {
-        visible: element => element.isConnected,
+        visible: element => Boolean(element?.isConnected &&
+            !element.closest('.vjs-hidden,[hidden],[style*="display: none"]')),
         documents: () => [cards],
     };
     const recovery = createRecovery({
@@ -119,6 +120,14 @@ assert.equal(createRecovery.sourceForLine(source, lines[2], 'https:').src,
     page.advance(12000);
     assert.equal(page.recovery.observe(), false, 'All lines must be attempted only once per section');
     assert.match(page.status(), /所有可用线路/);
+    page.cards.querySelector('.vjs-error-display').insertAdjacentHTML('beforeend',
+        '<div class="ans-vjserrdisplay">播放失败</div>');
+    page.video.error = null;
+    Object.defineProperty(page.video, 'paused', {get: () => false});
+    Object.defineProperty(page.video, 'readyState', {value: 4});
+    assert.equal(page.recovery.observe(), true);
+    assert.match(page.status(), /视频已恢复播放/,
+        'A manual recovery after exhausting lines must replace the failure message');
     page.dom.window.close();
 }
 
@@ -137,7 +146,7 @@ assert.equal(createRecovery.sourceForLine(source, lines[2], 'https:').src,
     Object.defineProperty(page.video, 'paused', {get: () => false});
     Object.defineProperty(page.video, 'readyState', {value: 4});
     assert.equal(page.recovery.observe(), true, 'Successful recovery must keep its status for one scan');
-    assert.match(page.status(), /已自动切换到“公网2”.*恢复播放/);
+    assert.match(page.status(), /视频已恢复播放/);
     assert.equal(page.recovery.observe(), false);
     page.dom.window.close();
 }
@@ -173,4 +182,33 @@ assert.equal(createRecovery.sourceForLine(source, lines[2], 'https:').src,
     page.dom.window.close();
 }
 
-console.log('PASS: media errors rotate enabled playback lines once and preserve URL signatures');
+{
+    const page = setup();
+    const modal = page.cards.querySelector('.vjs-error-display');
+    modal.insertAdjacentHTML('beforeend', '<div class="ans-vjserrdisplay">播放失败</div>');
+    page.video.error = null;
+    modal.classList.add('vjs-hidden');
+    assert.equal(page.recovery.observe(), false,
+        'A hidden retained error node must not initiate line recovery');
+    assert.equal(page.player.newSource, null);
+    page.dom.window.close();
+}
+
+for (const removeModal of [false, true]) {
+    const page = setup();
+    const modal = page.cards.querySelector('.vjs-error-display');
+    modal.insertAdjacentHTML('beforeend', '<div class="ans-vjserrdisplay">播放失败</div>');
+    page.recovery.observe();
+    if (removeModal) modal.remove();
+    Object.defineProperty(page.video, 'paused', {get: () => false});
+    Object.defineProperty(page.video, 'readyState', {value: 4});
+    page.advance(12000);
+    assert.equal(page.recovery.observe(), true,
+        'Playable media must clear the failure even when the error node remains or is removed');
+    assert.match(page.status(), /恢复播放/);
+    assert.equal(page.player.selected, 1, 'Recovery must not switch away from playable media');
+    assert.equal(page.recovery.observe(), false, 'The recovered state must be reported once');
+    page.dom.window.close();
+}
+
+console.log('PASS: media errors rotate lines and recovered playback clears retained error UI');

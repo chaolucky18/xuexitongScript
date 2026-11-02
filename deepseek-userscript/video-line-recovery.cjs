@@ -4,7 +4,7 @@ function createVideoLineRecovery({root, core, isActive, onStatus, now = Date.now
     let attempted = new Set();
     let lastAttemptAt = 0;
     let baseSource = null;
-    let lastTargetLabel = '';
+    let hadFailure = false;
 
     const locationKey = () => {
         const url = new URL(root.defaultView.location.href);
@@ -16,7 +16,7 @@ function createVideoLineRecovery({root, core, isActive, onStatus, now = Date.now
         attempted = new Set();
         lastAttemptAt = 0;
         baseSource = null;
-        lastTargetLabel = '';
+        hadFailure = false;
     }
     function currentSource(player) {
         try {
@@ -80,9 +80,10 @@ function createVideoLineRecovery({root, core, isActive, onStatus, now = Date.now
             if (!player) continue;
             const buttons = [...doc.querySelectorAll('input[name="ans-vjserrdisplay-opt"]')];
             const video = doc.querySelector('video#video_html5_api, video[id*="video_html5"]');
-            const errorModal = doc.querySelector('.vjs-error-display:not(.vjs-hidden) .ans-vjserrdisplay, ' +
-                '.ans-vjserrdisplay');
-            if (buttons.length || video?.error || errorModal) {
+            const errorModal = [...doc.querySelectorAll('.ans-vjserrdisplay')]
+                .find(element => !element.closest('.vjs-hidden,[hidden]') && core.visible(element));
+            // Keep observing healthy media after the player removes its error UI.
+            if (video || errorModal) {
                 return {doc, player, buttons, video, errorModal};
             }
         }
@@ -99,25 +100,22 @@ function createVideoLineRecovery({root, core, isActive, onStatus, now = Date.now
         const found = locate();
         if (!found) return false;
         const {player, buttons, video, errorModal} = found;
+        const playing = Boolean(video && !video.error && !video.paused && video.readyState >= 2);
+        // Current media readiness takes precedence over a retained error panel.
+        if (playing) {
+            const recovered = hadFailure || attempted.size > 0;
+            if (recovered) onStatus('视频已恢复播放。');
+            reset();
+            return recovered;
+        }
         const failed = Boolean(video?.error) || Boolean(errorModal);
         if (!failed) {
-            const playing = Boolean(video && !video.paused && video.readyState >= 2);
-            if (playing) {
-                const recovered = attempted.size > 0;
-                if (recovered && lastTargetLabel) {
-                    onStatus(`已自动切换到“${lastTargetLabel}”线路，视频已恢复播放。`);
-                }
-                attempted.clear();
-                lastAttemptAt = 0;
-                baseSource = null;
-                lastTargetLabel = '';
-                return recovered;
-            }
             // player.src() clears media errors before the replacement source loads.
             // Keep the selected line and attempts until media is actually ready.
             if (attempted.size) return true;
             return false;
         }
+        hadFailure = true;
         if (lastAttemptAt && now() - lastAttemptAt < COOLDOWN_MS) return true;
         const lines = player.options_?.playlines || [];
         if (!lines.length) {
@@ -151,7 +149,6 @@ function createVideoLineRecovery({root, core, isActive, onStatus, now = Date.now
             return false;
         }
         attempted.add(target.net || target.label);
-        lastTargetLabel = target.label;
         lastAttemptAt = now();
         let protocol = found.doc.defaultView.location.protocol;
         try { protocol = new URL(source.src).protocol; } catch (_) {}
