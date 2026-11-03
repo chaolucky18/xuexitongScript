@@ -27,7 +27,7 @@ player = replaceOnce(player, '                        this._isPlaying = false;\n
                         this._isPlaying = false;
                         this._clearCheckInterval();
                         if (this.configs.autoAdvanceNoVideo)`);
-player = replaceOnce(player, '// @version      3.3.0', '// @version      3.4.8');
+player = replaceOnce(player, '// @version      3.3.0', '// @version      3.4.11');
 player = replaceOnce(player, '// @description  自动播放、自动切换下一节，并在页面结构异常时安全停止', '// @description  自动播放与换节，DeepSeek 识题填答，可切换自动提交');
 player = replaceOnce(player, '// @grant        none', '// @grant        none\n// @noframes');
 player = replaceOnce(player, '            run() {', `            run() {
@@ -59,6 +59,10 @@ player = replaceOnce(player, '            _currentStepTitle() {', `            _
 player = replaceOnce(player, '            app._bindPageGuards();', '            // Page guards are bound by run() and removed by destroy().');
 player = replaceOnce(player, '            async play() {\n                try {', `            async play() {
                 if (!this._scriptRunning) return;
+                if (window.__xuexitongDeepSeekReview?.isSurveyPage?.()) {
+                    window.__xuexitongDeepSeekReview.scan();
+                    return;
+                }
                 if (window.__xuexitongDeepSeekReview?.isQuizPage?.()) {
                     this._isPlaying = false;
                     this._clearCheckInterval();
@@ -106,8 +110,9 @@ const submission = readFileSync(resolve(root, 'submit-helper.cjs'), 'utf8').repl
 const flow = readFileSync(resolve(root, 'learning-flow.cjs'), 'utf8').replace('module.exports = createLearningFlow;', '');
 const navigation = readFileSync(resolve(root, 'section-navigation.cjs'), 'utf8').replace('module.exports = createSectionNavigation;', '');
 const lineRecovery = readFileSync(resolve(root, 'video-line-recovery.cjs'), 'utf8').replace('module.exports = createVideoLineRecovery;', '');
+const survey = readFileSync(resolve(root, 'survey-flow.cjs'), 'utf8').replace('module.exports = createSurveyFlow;', '');
 const assistant = readFileSync(resolve(root, 'review-assistant.js'), 'utf8').replace("const LOCAL_TOKEN = '__LOCAL_TOKEN__';", `const LOCAL_TOKEN = '${token}';`);
-writeFileSync(resolve(out, '学习通-DeepSeek.user.js'), player + '\n(function () {\n' + core + '\n' + submission + '\n' + flow + '\n' + navigation + '\n' + lineRecovery + '\n' + assistant + '\n})();\n', { mode: 0o600 });
+writeFileSync(resolve(out, '学习通-DeepSeek.user.js'), player + '\n(function () {\n' + core + '\n' + submission + '\n' + flow + '\n' + navigation + '\n' + lineRecovery + '\n' + survey + '\n' + assistant + '\n})();\n', { mode: 0o600 });
 for (const file of ['local-service.mjs', 'deepseek-request.mjs', 'quiz-core.cjs']) {
     writeFileSync(resolve(out, file), readFileSync(resolve(root, file)));
 }

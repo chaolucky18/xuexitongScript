@@ -28,6 +28,51 @@
     connection.textContent = '正在连接本机服务…';
     const status = document.createElement('div');
     const result = document.createElement('div');
+    const surveySettings = document.createElement('details');
+    const surveySummary = document.createElement('summary');
+    surveySummary.textContent = '问卷评分设置'; surveySettings.append(surveySummary);
+    const surveyEnabled = document.createElement('input'); surveyEnabled.type = 'checkbox';
+    const surveyEnabledLabel = document.createElement('label');
+    surveyEnabledLabel.append(surveyEnabled, ' 自动填写本课程同类评价'); surveySettings.append(surveyEnabledLabel);
+    const scoreInputs = ['知识量', '趣味性', '教师参与', '课程设计'].map(label => {
+        const row = document.createElement('label'), select = document.createElement('select');
+        for (let score = 1; score <= 5; score++) {
+            const option = document.createElement('option'); option.value = String(score); option.textContent = `${score} 分`; select.append(option);
+        }
+        select.value = '5'; row.style.display = 'block'; row.append(label + ' ', select); surveySettings.append(row);
+        return select;
+    });
+    const surveyCommentLabel = document.createElement('label'), surveyComment = document.createElement('textarea');
+    surveyCommentLabel.textContent = '其他建议'; surveyCommentLabel.style.display = 'block';
+    surveyComment.value = '暂无建议'; surveyComment.maxLength = 1000; surveyComment.style.width = '100%';
+    surveyCommentLabel.append(surveyComment); surveySettings.append(surveyCommentLabel);
+    const saveSurvey = document.createElement('button'); saveSurvey.textContent = '保存本课程问卷规则'; surveySettings.append(saveSurvey);
+    function surveyRuleKey() {
+        const params = new URL(location.href).searchParams;
+        return 'xuexitong-survey-v1:' + ['courseId', 'clazzid', 'cpi'].map(name => params.get(name) || '').join(':');
+    }
+    function surveyRule() {
+        try {
+            const rule = JSON.parse(localStorage.getItem(surveyRuleKey()) || 'null');
+            return rule?.enabled ? rule : null;
+        } catch (_) { return null; }
+    }
+    const savedSurvey = surveyRule();
+    if (savedSurvey) {
+        surveyEnabled.checked = true;
+        scoreInputs.forEach((input, i) => { input.value = String(savedSurvey.scores?.[i] || 5); });
+        surveyComment.value = savedSurvey.comment || '';
+    }
+    saveSurvey.addEventListener('click', () => {
+        if (!new URL(location.href).searchParams.get('courseId')) return;
+        const rule = {enabled: surveyEnabled.checked, scores: scoreInputs.map(input => Number(input.value)), comment: surveyComment.value.trim()};
+        if (rule.enabled && !rule.comment) { status.textContent = '请填写“其他建议”或关闭自动填写。'; return; }
+        try { localStorage.setItem(surveyRuleKey(), JSON.stringify(rule)); }
+        catch (_) { status.textContent = '无法保存问卷规则，请检查浏览器存储设置。'; return; }
+        state.survey?.ruleChanged();
+        status.textContent = rule.enabled ? '问卷规则已保存，仅用于本课程中题目和选项相同的章节评价。' : '问卷自动填写已关闭。';
+        scan();
+    });
     const setup = document.createElement('a');
     setup.href = `${LOCAL_URL}/`;
     setup.target = '_blank'; setup.rel = 'noopener'; setup.textContent = '打开本机配置页';
@@ -44,7 +89,7 @@
     const button = document.createElement('button');
     button.textContent = '重新识别并作答';
     button.style.cssText = 'display:block;width:100%;padding:9px;margin-top:10px;border:0;border-radius:7px;background:#2563eb;color:white;cursor:pointer;font:inherit';
-    panel.append(title, stopButton, connection, setup, document.createElement('br'), autoLabel, document.createElement('br'), submitLabel, status, result, button);
+    panel.append(title, stopButton, connection, setup, document.createElement('br'), autoLabel, document.createElement('br'), submitLabel, surveySettings, status, result, button);
     panel.hidden = true;
     document.body.appendChild(panel);
     let submission;
@@ -52,6 +97,7 @@
         state.ready = null; state.signature = ''; state.completed = false;
         result.replaceChildren(); status.textContent = ''; state.waitingForReview = false;
         state.lineRecovery?.reset();
+        state.survey?.reset();
     }
     const resumeVideo = () => {
         const app = window.__xuexitongPlayerV3;
@@ -82,7 +128,17 @@
             [...doc.querySelectorAll('video#video_html5_api, video[id*="video_html5"]')]).filter(core.visible);
         return videos.find(video => video.readyState > 0) || videos[0] || null;
     };
-    state.beforeNext = flow.beforeNext; state.isQuizPage = flow.isQuizPage; state.stepTitle = flow.stepTitle;
+    const survey = typeof createSurveyFlow === 'function' ? createSurveyFlow({
+        root: document, core, isActive: () => state.active, getRule: surveyRule,
+        isAutoSubmit: () => autoSubmit.checked,
+        onHold: () => { state.waitingForReview = true; holdPlayback(); },
+        onStatus: message => { status.textContent = message; },
+        onComplete: () => { state.waitingForReview = false; if (navigation) navigation.start(); else window.__xuexitongPlayerV3?.nextUnit(); },
+    }) : null;
+    state.survey = survey;
+    state.beforeNext = () => survey?.beforeNext() || flow.beforeNext();
+    state.isSurveyPage = () => survey?.present() || false;
+    state.isQuizPage = flow.isQuizPage; state.stepTitle = flow.stepTitle;
     state.lineRecovery = lineRecovery;
     state.recoverVideoLine = () => lineRecovery?.observe() || false;
     function start() {
@@ -203,6 +259,7 @@
         try {
             if (state.recoverVideoLine()) return;
             flow.sync();
+            if (survey?.observe()) return;
         navigation?.observe();
             const questions = questionsNow();
             const completed = submission.completed();
