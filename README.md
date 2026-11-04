@@ -15,6 +15,10 @@
 仓库新增了独立的 [DeepSeek 控制台版](deepseek-console/README.md)，通过本地服务调用 DeepSeek API，识别章节练习题并辅助作答。原有 V3 脚本入口保持不变。
 
 
+## Mac / Chrome 油猴联动版（可选）
+
+[DeepSeek 油猴联动版](deepseek-userscript/README.md) 将视频播放与独立的章节测验页衔接：视频结束后先完成当前小节测验，确认平台提交结果，再进入下一小节并启动视频。需要本机 Node.js 服务和 DeepSeek API Key；原有 V3 和控制台版入口保持不变。
+
 ## 文件说明
 
 - [v3_optimized.js](v3_optimized.js)
