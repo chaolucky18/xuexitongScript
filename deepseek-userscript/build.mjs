@@ -27,7 +27,7 @@ player = replaceOnce(player, '                        this._isPlaying = false;\n
                         this._isPlaying = false;
                         this._clearCheckInterval();
                         if (this.configs.autoAdvanceNoVideo)`);
-player = replaceOnce(player, '// @version      3.3.0', '// @version      3.4.11');
+player = replaceOnce(player, '// @version      3.3.0', '// @version      3.4.12');
 player = replaceOnce(player, '// @description  自动播放、自动切换下一节，并在页面结构异常时安全停止', '// @description  自动播放与换节，DeepSeek 识题填答，可切换自动提交');
 player = replaceOnce(player, '// @grant        none', '// @grant        none\n// @noframes');
 player = replaceOnce(player, '            run() {', `            run() {

@@ -259,8 +259,8 @@
         try {
             if (state.recoverVideoLine()) return;
             flow.sync();
+            navigation?.observe();
             if (survey?.observe()) return;
-        navigation?.observe();
             const questions = questionsNow();
             const completed = submission.completed();
             const waitingForQuiz = flow.observe({ completed, hasQuestions: questions.length > 0, busy: state.busy });

@@ -82,9 +82,12 @@ function createSurveyFlow({root, core, isActive, getRule, isAutoSubmit, onHold, 
     function observe() {
         if (!isActive()) return false;
         if (section() !== context) reset();
+        if (phase === 'complete') {
+            onComplete();
+            return true;
+        }
         const entry = entryNow();
         if (!entry) return false;
-        if (phase === 'complete') return false;
         const doc = questionnaire(entry);
         onHold();
         if (taskDone(entry, doc)) { complete(entry, doc); return true; }
@@ -139,7 +142,7 @@ function createSurveyFlow({root, core, isActive, getRule, isAutoSubmit, onHold, 
     }
     reset();
     return {observe, reset, resultComplete, beforeNext: observe,
-        present: () => Boolean(entryNow()) && phase !== 'complete',
+        present: () => phase === 'complete' || Boolean(entryNow()),
         ruleChanged: () => { if (phase !== 'submitting') reset(); }};
 }
 module.exports = createSurveyFlow;

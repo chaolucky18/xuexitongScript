@@ -14,6 +14,7 @@ function setup(rule = {scores: [5, 4, 3, 2], comment: '暂无建议'}) {
     doc.body.innerHTML = titles.map(title => `<div class="question-item"><div class="topic-title"><span class="topic-txt">${title}</span></div>${[5,4,3,2,1].map(score => `<label role="radio" aria-checked="false"><input type="radio">${score}分</label>`).join('')}</div>`).join('') +
         '<div class="question-item"><span class="topic-txt">其他建议</span><textarea></textarea></div><a id="submitSuccess">提交</a><a class="icon-back">返回</a>';
     let opened = 0, submitted = 0, next = 0, done = false, held = 0, status = '', clock = 0, active = true, autoSubmit = true;
+    let navigationPending = false;
     entry.window.checkJobFinish = () => done;
     entry.window.document.querySelector('#render').onclick = () => {
         opened++; root.querySelector('.voteContainer').hidden = false;
@@ -29,9 +30,12 @@ function setup(rule = {scores: [5, 4, 3, 2], comment: '暂无建议'}) {
     const flow = createSurveyFlow({root, core: {documents: () => [root, entry.window.document], visible,
         clean: s => String(s || '').replace(/\s+/g, ' ').trim()}, isActive: () => active,
         getRule: () => rule, isAutoSubmit: () => autoSubmit, onHold: () => { held++; },
-        onStatus: text => { status = text; }, onComplete: () => { next++; }, now: () => clock});
+        onStatus: text => { status = text; }, onComplete: () => {
+            if (!navigationPending) { next++; navigationPending = true; }
+        }, now: () => clock});
     return {root, doc, flow, setDone: () => { done = true; }, advance: ms => { clock += ms; },
         stop: () => {active = false;}, manualSubmit: () => {autoSubmit = false;},
+        finishNavigation: () => {navigationPending = false;},
         counts: () => ({opened, submitted, next, held}), status: () => status,
         close: () => {dom.window.close();entry.window.close();}};
 }
@@ -48,6 +52,17 @@ function setup(rule = {scores: [5, 4, 3, 2], comment: '暂无建议'}) {
     p.setDone(); p.flow.observe(); p.flow.observe();
     assert.equal(p.counts().next, 1);
     assert.equal(p.root.querySelector('.voteContainer').hidden, true);
+    p.close();
+}
+{
+    const p = setup(); p.flow.observe(); p.flow.observe();
+    p.setDone(); p.flow.observe();
+    assert.equal(p.counts().next, 1);
+    p.root.querySelector('.voteContainer').hidden = true;
+    p.finishNavigation();
+    p.flow.observe();
+    assert.equal(p.counts().next, 2, 'Navigation must be retried if the completed survey has no entry frame');
+    assert.equal(p.flow.present(), true, 'Playback stays paused until the section actually changes');
     p.close();
 }
 {
