@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 
-async function run({ enabled = true, expected = 1, rejected = false } = {}) {
-    const dom = new JSDOM(`<main><p>题量: ${expected}</p><section id="question"><h3>判断题</h3><p>测试题目。</p>
+async function run({ enabled = true, expected = 1, rejected = false, mode = 'quiz' } = {}) {
+    const dom = new JSDOM(`${mode === 'assignment' ? '<div class="prev_title" title="作业">作业</div>' : ''}<main><p>题量: ${expected}</p><section id="question"><h3>判断题</h3><p>测试题目。</p>
     <label><input type="radio" name="q" value="A">A、对</label><label><input type="radio" name="q" value="B">B、错</label></section>
     <button id="submit">提交</button><div id="dialogs"></div></main>`, {
         url: 'https://mooc1.chaoxing.com/mycourse/studentstudy', runScripts: 'outside-only',
@@ -20,8 +20,17 @@ async function run({ enabled = true, expected = 1, rejected = false } = {}) {
             confirmed++;
             window.document.querySelector('#dialogs').replaceChildren();
             window.document.querySelector('#question').style.display = 'none';
-            const grade = window.document.createElement('p'); grade.textContent = '本次成绩 100 分 我的答案：A';
-            window.document.querySelector('main').appendChild(grade);
+            if (mode === 'assignment') {
+                const frame = window.document.createElement('iframe');
+                window.document.body.appendChild(frame);
+                const result = frame.contentDocument;
+                Object.defineProperty(result, 'URL', { configurable: true,
+                    value: 'https://mooc1.chaoxing.com/mooc-ans/work/selectWorkQuestionYiPiYue?submit=false' });
+                result.body.innerHTML = '<p>章节测验 已完成 第四章作业 第1次作答 我的答案：B</p>';
+            } else {
+                const grade = window.document.createElement('p'); grade.textContent = '本次成绩 100 分 我的答案：A';
+                window.document.querySelector('main').appendChild(grade);
+            }
         });
     });
     window.fetch = async url => ({ ok: true, json: async () => url.endsWith('/health') ?
@@ -54,3 +63,7 @@ const rejected = await run({ rejected: true });
 assert.equal(rejected.confirmed, 0);
 assert.match(rejected.message, /未作答|拒绝/);
 console.log('PASS: incomplete-answer warning is never confirmed');
+const assignment = await run({ mode: 'assignment' });
+assert.deepEqual({ submitted: assignment.submitted, confirmed: assignment.confirmed, advanced: assignment.advanced },
+    { submitted: 1, confirmed: 1, advanced: 1 });
+console.log('PASS: completed assignments advance to the next section');

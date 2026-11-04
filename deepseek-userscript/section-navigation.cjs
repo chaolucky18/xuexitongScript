@@ -15,8 +15,10 @@ function createSectionNavigation({root, core, isActive, onStatus, onVideo, onFal
         if (target?.isConnected) target.click();
         onStatus(`测验已完成，正在进入下一小节（${p.attempts}/3）…`);
     }
-    function start() {
-        if (!isActive() || pending) return;
+    function start({supersedeArrived = false} = {}) {
+        if (!isActive()) return;
+        if (pending?.arrived && supersedeArrived) reset();
+        if (pending) return;
         const nodes = [...root.querySelectorAll('#coursetree .posCatalog_select:not(.firstLayer)')]
             .filter(el => el.querySelector('.posCatalog_name') && !el.querySelector('.posCatalog_select'))
             // Chaoxing puts a group's UL next to its heading, inside the same LI.

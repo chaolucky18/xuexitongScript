@@ -53,8 +53,9 @@ function createLearningFlow({ root, core, isActive, onHold, onRelease, onEnter, 
         sync();
         if (!isActive()) return false;
         const quizPage = stepTitle() === '章节测验';
-        if (pending || quizPage) onHold();
-        if (completed && (pending || quizPage) && !busy) { completeQuiz(); return true; }
+        const reviewPage = quizPage || stepTitle() === '作业';
+        if (pending || reviewPage) onHold();
+        if (completed && (pending || reviewPage) && !busy) { completeQuiz(); return true; }
         if (pending) {
             loaded ||= hasQuestions || completed;
             if (!loaded && Date.now() - openedAt >= 120000) failed = true;
@@ -68,6 +69,6 @@ function createLearningFlow({ root, core, isActive, onHold, onRelease, onEnter, 
         key = chapterKey(); pending = approved = advanced = loaded = failed = returning = false; openedAt = 0;
     }
     return { beforeNext, completeQuiz, observe, sync, reset, sectionKey: chapterKey, stepTitle,
-        isQuizPage: () => stepTitle() === '章节测验' };
+        isQuizPage: () => ['章节测验', '作业'].includes(stepTitle()) };
 }
 module.exports = createLearningFlow;

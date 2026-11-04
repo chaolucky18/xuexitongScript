@@ -3,10 +3,14 @@ import {createRequire} from 'node:module';
 import {JSDOM} from 'jsdom';
 const require=createRequire(import.meta.url);
 const createNavigation=require('../section-navigation.cjs');
-function setup(){
+function setup({autoNavigate = false} = {}){
  const dom=new JSDOM('<div id="coursetree"><div class="posCatalog_select posCatalog_active" id="cur101"><span class="posCatalog_name">Current</span></div><div class="posCatalog_select" id="cur102"><span class="posCatalog_name">Next</span></div><div class="posCatalog_select" id="cur103"><span class="posCatalog_name">Third</span></div></div><iframe></iframe>',{url:'https://mooc1.chaoxing.com/mycourse/studentstudy?chapterId=101'});
  const w=dom.window;let now=0,clicks=0,plays=0,active=true;
- const target=w.document.querySelector('#cur102 .posCatalog_name');target.onclick=()=>clicks++;
+ const target=w.document.querySelector('#cur102 .posCatalog_name');
+ target.onclick=()=>{clicks++;if(autoNavigate)w.history.replaceState({}, '', '?chapterId=102');};
+ w.document.querySelector('#cur103 .posCatalog_name').onclick=()=>{
+  clicks++;if(autoNavigate)w.history.replaceState({}, '', '?chapterId=103');
+ };
  const core={visible:()=>true,documents:()=>[w.document]};
  const nav=createNavigation({root:w.document,core,isActive:()=>active,now:()=>now,onStatus(){},onVideo:()=>plays++});
  return {w,nav,target,get clicks(){return clicks},get plays(){return plays},tick(ms=0){now+=ms;nav.observe()},stop(){active=false;nav.reset()},close(){w.close()}};
@@ -21,6 +25,15 @@ function setup(){
 }
 {
  const p=setup();p.nav.start();p.w.history.replaceState({},'', '?chapterId=999');p.tick(10000);assert.equal(p.clicks,1,'Manual navigation cancels old target');p.close();
+}
+{
+ const p=setup({autoNavigate:true});p.nav.start();p.tick();
+ assert.equal(p.clicks,1);
+ p.nav.start();assert.equal(p.clicks,1,'An arrived destination still waits for its video');
+ p.nav.start({supersedeArrived:true});
+ assert.equal(p.clicks,2,'A completed review page can hand navigation to the following section');
+ assert.match(p.w.location.search,/chapterId=103/);
+ p.close();
 }
 {
  const p=setup();p.nav.start();for(let i=0;i<8;i++)p.tick(8000);assert.equal(p.clicks,3,'Retries must be bounded');p.close();

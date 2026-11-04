@@ -133,7 +133,7 @@
         isAutoSubmit: () => autoSubmit.checked,
         onHold: () => { state.waitingForReview = true; holdPlayback(); },
         onStatus: message => { status.textContent = message; },
-        onComplete: () => { state.waitingForReview = false; if (navigation) navigation.start(); else window.__xuexitongPlayerV3?.nextUnit(); },
+        onComplete: () => { state.waitingForReview = false; if (navigation) navigation.start({supersedeArrived: true}); else window.__xuexitongPlayerV3?.nextUnit(); },
     }) : null;
     state.survey = survey;
     state.beforeNext = () => survey?.beforeNext() || flow.beforeNext();
@@ -250,8 +250,9 @@
         state.ready = null;
         state.completed = true;
         state.waitingForReview = false;
-        status.textContent = outcome === 'chapter' ? '平台已确认提交结果，继续下一节。' : '随堂题已提交，继续播放。';
-        if (outcome === 'chapter') flow.completeQuiz();
+        status.textContent = outcome === 'assignment' ? '作业已确认完成，继续下一节。'
+            : outcome === 'chapter' ? '平台已确认提交结果，继续下一节。' : '随堂题已提交，继续播放。';
+        if (outcome === 'chapter' || outcome === 'assignment') flow.completeQuiz();
         else window.__xuexitongPlayerV3?.play();
     }
     function scan() {
