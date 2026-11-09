@@ -561,6 +561,10 @@
                 document.addEventListener('visibilitychange', resumePlaybackNow);
             },
             destroy() {
+                if (window.__xuexitongPatrol) {
+                    clearInterval(window.__xuexitongPatrol);
+                    window.__xuexitongPatrol = null;
+                }
                 this._isPlaying = false;
                 this._clearCheckInterval();
                 this._detachVideoEvents();
@@ -585,6 +589,18 @@
         try {
             app.run();
             app._bindPageGuards();
+            // 巡逻：每3秒检查一次，有未播完的视频但没在播放时自动接管
+            if (window.__xuexitongPatrol) clearInterval(window.__xuexitongPatrol);
+            window.__xuexitongPatrol = setInterval(() => {
+                if (app._isPlaying || app._nextUnitPending) return;
+                app._videoEl = null;
+                const v = app._getVideoEl();
+                if (v && !v.ended) {
+                    console.log('%c巡逻发现未播放的视频，自动接管', 'color:#607D8B');
+                    try { app._initCellData(); } catch (e) {}
+                    app.play();
+                }
+            }, 3000);
         } catch (error) {
             console.error("%c脚本运行失败: ", "color:#F44336;font-weight:bold", error.message);
             console.log("请检查是否在正确的课程播放页面，或者页面结构是否再次发生改变。");
