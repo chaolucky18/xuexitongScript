@@ -444,6 +444,40 @@ async function testAdjacentTaskHeaderCompletion() {
     console.log('PASS: adjacent task headers select the first unfinished video');
 }
 
+async function testNearbyTaskMarkerWithoutCardClass() {
+    const plays = [];
+    const { dom, window, app } = await createApp(baseHtml(`
+        <div class="prev_title">视频</div>
+        <div id="shared-results">
+            <div><span class="icon_Completed"></span> 任务点已完成</div>
+            <div><iframe class="ans-insertvideo-online" id="plain-video-a"></iframe></div>
+            <div>任务点 完成条件：观看时长不少于总时长的90%</div>
+            <div><iframe class="ans-insertvideo-online" id="plain-video-b"></iframe></div>
+        </div>
+    `), (win) => {
+        const frameA = win.document.getElementById('plain-video-a');
+        frameA.contentWindow.HTMLMediaElement.prototype.play = async function () {
+            plays.push(this.getAttribute('data-test-id') || 'plain-first');
+            this.dispatchEvent(new win.Event('play'));
+        };
+        frameA.contentDocument.body.innerHTML = '<video id="video_html5_api" data-test-id="plain-first"></video>';
+        const frameB = win.document.getElementById('plain-video-b');
+        frameB.contentWindow.HTMLMediaElement.prototype.play = async function () {
+            plays.push(this.getAttribute('data-test-id') || 'plain-second');
+            this.dispatchEvent(new win.Event('play'));
+        };
+        frameB.contentDocument.body.innerHTML = '<video id="video_html5_api" data-test-id="plain-second"></video>';
+    });
+    await wait(100);
+    assert.ok(!plays.includes('plain-first'), 'the video after a completed plain header must be skipped');
+    assert.ok(plays.includes('plain-second'), 'the video after the unfinished plain header must play');
+    assert.equal(app._currentVideo?.getAttribute('data-test-id'), 'plain-second');
+
+    app.destroy();
+    dom.window.close();
+    console.log('PASS: ordinary sibling task headers pair with the correct videos');
+}
+
 async function main() {
     assert.match(source, /@version\s+1\.8\.4/);
     assert.doesNotMatch(source, /playbackRate/);
@@ -462,6 +496,7 @@ async function main() {
     await testLazyMultiVideoSlot();
     await testSharedContainerCompletionIsolation();
     await testAdjacentTaskHeaderCompletion();
+    await testNearbyTaskMarkerWithoutCardClass();
     console.log('ALL PASS: 1.8.4 multi-video and special-page stress tests');
 }
 

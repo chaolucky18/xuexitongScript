@@ -1775,7 +1775,29 @@ _finishCurrentVideo(reason) {
  );
  return !/(?:not|un)[-_ ]?(?:finished|completed)/i.test(markerText);
  },
+ _nearbyTaskCompletion(video) {
+ const start = this._videoFrameElement(video) || video;
+ let current = start;
+ for (let depth = 0; current && depth < 6; depth++) {
+ let sibling = current.previousElementSibling;
+ for (let siblingDepth = 0; sibling && siblingDepth < 3; siblingDepth++) {
+ const text = this._cleanText(sibling.innerText || sibling.textContent || '');
+ if (/(?:任务点|完成条件|观看时长)/i.test(text)) {
+ return {
+ found: true,
+ completed: /(?:任务点已完成|视频已看完|已观看完成|已完成观看)/i.test(text) &&
+ !/(?:未完成|尚未完成|未观看)/i.test(text),
+ };
+ }
+ sibling = sibling.previousElementSibling;
+ }
+ current = current.parentElement;
+ }
+ return { found: false, completed: false };
+ },
  _videoTaskCompleted(video) {
+ const nearbyTask = this._nearbyTaskCompletion(video);
+ if (nearbyTask.found) return nearbyTask.completed;
  const wrapper = this._videoTaskWrapper(video);
  if (wrapper) {
  const mediaCount = this._videoMediaCountWithin(wrapper);
