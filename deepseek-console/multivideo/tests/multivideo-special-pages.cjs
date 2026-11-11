@@ -514,6 +514,42 @@ async function testTaskMarkerByDocumentOrder() {
     console.log('PASS: document-order fallback pairs remote task headers with video order');
 }
 
+async function testSpatialTaskStatus() {
+    const { dom, window, app } = await createApp(baseHtml(`
+        <div class="prev_title">视频</div>
+        <div>
+            <div id="spatial-marker-a"><span class="icon_Completed"></span> 任务点已完成</div>
+            <div><iframe class="ans-insertvideo-online" id="spatial-video-a"></iframe></div>
+            <div id="spatial-marker-b">任务点 完成条件：观看时长不少于总时长的90%</div>
+            <div><iframe class="ans-insertvideo-online" id="spatial-video-b"></iframe></div>
+        </div>
+    `), (win) => {
+        const rect = (top, bottom) => () => ({
+            left: 0, right: 900, top, bottom, width: 900, height: bottom - top,
+        });
+        const frameA = win.document.getElementById('spatial-video-a');
+        frameA.getBoundingClientRect = rect(150, 650);
+        frameA.contentWindow.Element.prototype.getBoundingClientRect = win.Element.prototype.getBoundingClientRect;
+        frameA.contentWindow.Element.prototype.getClientRects = win.Element.prototype.getClientRects;
+        frameA.contentDocument.body.innerHTML = '<video id="video_html5_api" data-test-id="spatial-first"></video>';
+        const frameB = win.document.getElementById('spatial-video-b');
+        frameB.getBoundingClientRect = rect(750, 1250);
+        frameB.contentWindow.Element.prototype.getBoundingClientRect = win.Element.prototype.getBoundingClientRect;
+        frameB.contentWindow.Element.prototype.getClientRects = win.Element.prototype.getClientRects;
+        frameB.contentDocument.body.innerHTML = '<video id="video_html5_api" data-test-id="spatial-second"></video>';
+        win.document.getElementById('spatial-marker-a').getBoundingClientRect = rect(100, 120);
+        win.document.getElementById('spatial-marker-b').getBoundingClientRect = rect(700, 720);
+    });
+    const firstVideo = window.document.getElementById('spatial-video-a').contentDocument.querySelector('video');
+    const secondVideo = window.document.getElementById('spatial-video-b').contentDocument.querySelector('video');
+    assert.equal(app._spatialTaskCompletion(firstVideo).completed, true);
+    assert.equal(app._spatialTaskCompletion(secondVideo).completed, false);
+
+    app.destroy();
+    dom.window.close();
+    console.log('PASS: visible task status is paired to the nearest video by screen position');
+}
+
 async function main() {
     assert.match(source, /@version\s+1\.8\.4/);
     assert.doesNotMatch(source, /playbackRate/);
@@ -534,6 +570,7 @@ async function main() {
     await testAdjacentTaskHeaderCompletion();
     await testNearbyTaskMarkerWithoutCardClass();
     await testTaskMarkerByDocumentOrder();
+    await testSpatialTaskStatus();
     console.log('ALL PASS: 1.8.4 multi-video and special-page stress tests');
 }
 

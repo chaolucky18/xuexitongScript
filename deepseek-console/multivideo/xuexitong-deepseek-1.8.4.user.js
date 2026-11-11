@@ -1843,9 +1843,81 @@ _finishCurrentVideo(reason) {
  }
  return { found: false, completed: false };
  },
+ _topLevelRect(el) {
+ if (!el?.getBoundingClientRect) return null;
+ let rect = el.getBoundingClientRect();
+ let currentWindow = el.ownerDocument?.defaultView;
+ for (let depth = 0; currentWindow && currentWindow !== window && depth < 6; depth++) {
+ let frame = null;
+ try {
+ frame = currentWindow.frameElement;
+ } catch (_) {
+ return null;
+ }
+ if (!frame) return null;
+ const frameRect = frame.getBoundingClientRect();
+ rect = {
+ left: rect.left + frameRect.left,
+ right: rect.right + frameRect.left,
+ top: rect.top + frameRect.top,
+ bottom: rect.bottom + frameRect.top,
+ width: rect.width,
+ height: rect.height,
+ };
+ currentWindow = frame.ownerDocument?.defaultView;
+ }
+ return rect;
+ },
+ _spatialTaskMarkers() {
+ const markerPattern = /(?:任务点|完成条件|观看时长)/i;
+ const markers = [];
+ for (const root of this._allSearchRoots()) {
+ let elements = [];
+ try {
+ elements = root.querySelectorAll('div,span,p,section,li,a,strong');
+ } catch (_) {
+ continue;
+ }
+ for (const el of elements) {
+ const text = this._cleanText(el.innerText || el.textContent || '');
+ if (!text || text.length > 180 || !markerPattern.test(text)) continue;
+ if (Array.from(el.children).some((child) =>
+ markerPattern.test(this._cleanText(child.innerText || child.textContent || '')))) continue;
+ const rect = this._topLevelRect(el);
+ if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+ markers.push({ text, rect });
+ }
+ }
+ return markers;
+ },
+ _spatialTaskCompletion(video) {
+ const videoRect = this._topLevelRect(video);
+ if (!videoRect || videoRect.width <= 0 || videoRect.height <= 0) {
+ return { found: false, completed: false };
+ }
+ let best = null;
+ let bestDistance = Infinity;
+ for (const marker of this._spatialTaskMarkers()) {
+ const verticalDistance = videoRect.top - marker.rect.bottom;
+ if (verticalDistance < -20 || verticalDistance > 600) continue;
+ const horizontalOverlap =
+ Math.min(videoRect.right, marker.rect.right) >= Math.max(videoRect.left, marker.rect.left) - 100;
+ if (!horizontalOverlap || verticalDistance >= bestDistance) continue;
+ best = marker;
+ bestDistance = verticalDistance;
+ }
+ if (!best) return { found: false, completed: false };
+ return {
+ found: true,
+ completed: /(?:任务点已完成|视频已看完|已观看完成|已完成观看)/i.test(best.text) &&
+ !/(?:未完成|尚未完成|未观看)/i.test(best.text),
+ };
+ },
  _videoTaskCompleted(video) {
  const nearbyTask = this._nearbyTaskCompletion(video);
  if (nearbyTask.found) return nearbyTask.completed;
+ const spatialTask = this._spatialTaskCompletion(video);
+ if (spatialTask.found) return spatialTask.completed;
  const orderedTask = this._orderedTaskCompletion(video);
  if (orderedTask.found) return orderedTask.completed;
  const wrapper = this._videoTaskWrapper(video);
