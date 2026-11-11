@@ -550,6 +550,36 @@ async function testSpatialTaskStatus() {
     console.log('PASS: visible task status is paired to the nearest video by screen position');
 }
 
+async function testGlobalCompletedTaskFallback() {
+    const { dom, window, app } = await createApp(baseHtml(`
+        <div class="prev_title">视频</div>
+        <div class="global-status-a"><span class="icon_Completed"></span> 任务点已完成</div>
+        <div class="global-status-b">任务点 完成条件：观看时长不少于总时长的90%</div>
+        <div id="global-video-container">
+            <div><iframe class="ans-insertvideo-online" id="global-video-a"></iframe></div>
+            <div><iframe class="ans-insertvideo-online" id="global-video-b"></iframe></div>
+        </div>
+    `), (win) => {
+        const zeroRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
+        win.document.querySelector('.global-status-a').getBoundingClientRect = zeroRect;
+        win.document.querySelector('.global-status-b').getBoundingClientRect = zeroRect;
+        const frameA = win.document.getElementById('global-video-a');
+        frameA.getBoundingClientRect = zeroRect;
+        frameA.contentDocument.body.innerHTML = '<video id="video_html5_api" data-test-id="global-first"></video>';
+        const frameB = win.document.getElementById('global-video-b');
+        frameB.getBoundingClientRect = zeroRect;
+        frameB.contentDocument.body.innerHTML = '<video id="video_html5_api" data-test-id="global-second"></video>';
+    });
+    const firstVideo = window.document.getElementById('global-video-a').contentDocument.querySelector('video');
+    const secondVideo = window.document.getElementById('global-video-b').contentDocument.querySelector('video');
+    assert.equal(app._globalTaskCompleted(firstVideo), true);
+    assert.equal(app._globalTaskCompleted(secondVideo), false);
+
+    app.destroy();
+    dom.window.close();
+    console.log('PASS: a visible completed marker skips the first task even without usable geometry');
+}
+
 async function main() {
     assert.match(source, /@version\s+1\.8\.4/);
     assert.doesNotMatch(source, /playbackRate/);
@@ -571,6 +601,7 @@ async function main() {
     await testNearbyTaskMarkerWithoutCardClass();
     await testTaskMarkerByDocumentOrder();
     await testSpatialTaskStatus();
+    await testGlobalCompletedTaskFallback();
     console.log('ALL PASS: 1.8.4 multi-video and special-page stress tests');
 }
 

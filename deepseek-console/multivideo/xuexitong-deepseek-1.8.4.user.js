@@ -1738,6 +1738,18 @@ _finishCurrentVideo(reason) {
  }
  }) || null;
  },
+ _frameElementForDocument(ownerDocument) {
+ if (!ownerDocument) return null;
+ const frames = this._allSearchRoots().flatMap((root) =>
+ Array.from(root.querySelectorAll?.('iframe') || []));
+ return frames.find((frame) => {
+ try {
+ return frame.contentDocument === ownerDocument;
+ } catch (_) {
+ return false;
+ }
+ }) || null;
+ },
  _videoTaskWrapper(video) {
  if (!video) return null;
  const selector = '.ans-attach-ct, .ans-attach-online, ' +
@@ -1800,11 +1812,7 @@ _finishCurrentVideo(reason) {
  let frame = this._videoFrameElement(video);
  for (let depth = 0; frame && depth < 6; depth++) {
  chain.push(frame);
- try {
- frame = frame.ownerDocument?.defaultView?.frameElement || null;
- } catch (_) {
- frame = null;
- }
+ frame = this._frameElementForDocument(frame.ownerDocument);
  }
  return chain;
  },
@@ -1846,15 +1854,8 @@ _finishCurrentVideo(reason) {
  _topLevelRect(el) {
  if (!el?.getBoundingClientRect) return null;
  let rect = el.getBoundingClientRect();
- let currentWindow = el.ownerDocument?.defaultView;
- for (let depth = 0; currentWindow && currentWindow !== window && depth < 6; depth++) {
- let frame = null;
- try {
- frame = currentWindow.frameElement;
- } catch (_) {
- return null;
- }
- if (!frame) return null;
+ let frame = this._frameElementForDocument(el.ownerDocument);
+ for (let depth = 0; frame && depth < 6; depth++) {
  const frameRect = frame.getBoundingClientRect();
  rect = {
  left: rect.left + frameRect.left,
@@ -1864,7 +1865,7 @@ _finishCurrentVideo(reason) {
  width: rect.width,
  height: rect.height,
  };
- currentWindow = frame.ownerDocument?.defaultView;
+ frame = this._frameElementForDocument(frame.ownerDocument);
  }
  return rect;
  },
@@ -1874,7 +1875,7 @@ _finishCurrentVideo(reason) {
  for (const root of this._allSearchRoots()) {
  let elements = [];
  try {
- elements = root.querySelectorAll('div,span,p,section,li,a,strong');
+ elements = root.querySelectorAll('*');
  } catch (_) {
  continue;
  }
@@ -1891,7 +1892,8 @@ _finishCurrentVideo(reason) {
  return markers;
  },
  _spatialTaskCompletion(video) {
- const videoRect = this._topLevelRect(video);
+ const videoFrame = this._videoFrameElement(video);
+ const videoRect = this._topLevelRect(videoFrame || video);
  if (!videoRect || videoRect.width <= 0 || videoRect.height <= 0) {
  return { found: false, completed: false };
  }
@@ -1913,11 +1915,41 @@ _finishCurrentVideo(reason) {
  !/(?:未完成|尚未完成|未观看)/i.test(best.text),
  };
  },
+ _allTaskMarkerTexts() {
+ const markerPattern = /(?:任务点|完成条件|观看时长)/i;
+ const texts = [];
+ for (const root of this._allSearchRoots()) {
+ let elements = [];
+ try {
+ elements = root.querySelectorAll('*');
+ } catch (_) {
+ continue;
+ }
+ for (const el of elements) {
+ const text = this._cleanText(el.innerText || el.textContent || '');
+ if (!text || text.length > 180 || !markerPattern.test(text)) continue;
+ if (Array.from(el.children).some((child) =>
+ markerPattern.test(this._cleanText(child.innerText || child.textContent || '')))) continue;
+ texts.push(text);
+ }
+ }
+ return texts;
+ },
+ _globalTaskCompleted(video) {
+ const completedMarkers = this._allTaskMarkerTexts().filter((text) =>
+ /(?:任务点已完成|视频已看完|已观看完成|已完成观看)/i.test(text) &&
+ !/(?:未完成|尚未完成|未观看)/i.test(text)).length;
+ if (!completedMarkers) return false;
+ const videos = this._collectVideos();
+ const index = videos.indexOf(video);
+ return index >= 0 && index < completedMarkers;
+ },
  _videoTaskCompleted(video) {
- const nearbyTask = this._nearbyTaskCompletion(video);
- if (nearbyTask.found) return nearbyTask.completed;
  const spatialTask = this._spatialTaskCompletion(video);
  if (spatialTask.found) return spatialTask.completed;
+ const nearbyTask = this._nearbyTaskCompletion(video);
+ if (nearbyTask.found) return nearbyTask.completed;
+ if (this._globalTaskCompleted(video)) return true;
  const orderedTask = this._orderedTaskCompletion(video);
  if (orderedTask.found) return orderedTask.completed;
  const wrapper = this._videoTaskWrapper(video);
