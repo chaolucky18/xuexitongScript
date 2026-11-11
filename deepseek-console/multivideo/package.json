@@ -1,0 +1,13 @@
+{
+  "name": "xuexitong-deepseek-multivideo",
+  "version": "1.8.4",
+  "private": true,
+  "description": "学习通多视频播放、导航恢复与 DeepSeek 章节测验助手",
+  "scripts": {
+    "test": "node tests/core.cjs && node tests/dom-navigation.cjs && node tests/frame-bridge.cjs && node tests/passive-page.cjs && node tests/shadow-dom.cjs && node tests/multivideo-special-pages.cjs"
+  },
+  "devDependencies": {
+    "jquery": "3.7.1",
+    "jsdom": "^24.1.3"
+  }
+}

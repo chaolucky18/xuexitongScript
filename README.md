@@ -14,6 +14,8 @@
 
 仓库新增了独立的 [DeepSeek 控制台版](deepseek-console/README.md)，通过本地服务调用 DeepSeek API，识别章节练习题并辅助作答。原有 V3 脚本入口保持不变。
 
+另外提供 [多视频增强油猴版](deepseek-console/multivideo/README.md)，直接使用 DeepSeek API，不需要本地服务；支持同页多个视频、隐藏或懒加载视频卡片，以及特殊页面导航恢复。
+
 
 ## 文件说明
 
