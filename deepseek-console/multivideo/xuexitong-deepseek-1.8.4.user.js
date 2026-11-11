@@ -1775,6 +1775,14 @@ _finishCurrentVideo(reason) {
  },
  _containerMarkedCompleted(container) {
  if (!container) return false;
+ if (/(?:^|\s)ans-job-finished(?:\s|$)/i.test(String(container.className || ''))) {
+ return true;
+ }
+ const aria = this._cleanText(
+ container.getAttribute?.('aria-label') || container.getAttribute?.('title') || ''
+ );
+ if (/(?:任务点已完成|视频已看完|已观看完成)/.test(aria)) return true;
+ if (/(?:任务点未完成|未观看|尚未完成)/.test(aria)) return false;
  const text = this._cleanText(container.innerText || container.textContent || '');
  if (/(?:未完成|尚未完成|未观看)/i.test(text)) return false;
  if (/(?:任务点已完成|视频已看完|已观看完成|已完成观看|观看完成|本视频已学完)/i.test(text)) {
@@ -1792,12 +1800,22 @@ _finishCurrentVideo(reason) {
  let current = start;
  for (let depth = 0; current && depth < 6; depth++) {
  let sibling = current.previousElementSibling;
+ let crossedMedia = false;
  for (let siblingDepth = 0; sibling && siblingDepth < 3; siblingDepth++) {
- const text = this._cleanText(sibling.innerText || sibling.textContent || '');
+ const containsMedia = sibling.matches?.('video') ||
+ Boolean(sibling.querySelector?.('video')) ||
+ this._isVideoFrameSlot(sibling);
+ if (containsMedia) crossedMedia = true;
+ const text = this._cleanText([
+ sibling.getAttribute?.('aria-label') || '',
+ sibling.getAttribute?.('title') || '',
+ sibling.innerText || sibling.textContent || '',
+ ].join(' '));
  if (/(?:任务点|完成条件|观看时长)/i.test(text)) {
  return {
  found: true,
- completed: /(?:任务点已完成|视频已看完|已观看完成|已完成观看)/i.test(text) &&
+ completed: !crossedMedia &&
+ /(?:任务点已完成|视频已看完|已观看完成|已完成观看)/i.test(text) &&
  !/(?:未完成|尚未完成|未观看)/i.test(text),
  };
  }
@@ -1958,7 +1976,31 @@ _finishCurrentVideo(reason) {
  const index = videos.indexOf(video);
  return index >= 0 && index < completedMarkers;
  },
+ _exactVideoTaskStatus(video) {
+ const wrapper = this._videoTaskWrapper(video);
+ if (wrapper && this._videoMediaCountWithin(wrapper) <= 1 &&
+ /(?:^|\s)ans-job-finished(?:\s|$)/i.test(String(wrapper.className || ''))) {
+ return { found: true, completed: true };
+ }
+ const frame = this._videoFrameElement(video);
+ let sibling = frame?.previousElementSibling;
+ for (let depth = 0; sibling && depth < 3; depth++) {
+ const status = this._cleanText(
+ sibling.getAttribute?.('aria-label') || sibling.getAttribute?.('title') || ''
+ );
+ if (/任务点已完成|视频已看完|已观看完成/.test(status)) {
+ return { found: true, completed: true };
+ }
+ if (/任务点未完成|未观看|尚未完成/.test(status)) {
+ return { found: true, completed: false };
+ }
+ sibling = sibling.previousElementSibling;
+ }
+ return { found: false, completed: false };
+ },
  _videoTaskCompleted(video) {
+ const exactTask = this._exactVideoTaskStatus(video);
+ if (exactTask.found) return exactTask.completed;
  const spatialTask = this._spatialTaskCompletion(video);
  if (spatialTask.found) return spatialTask.completed;
  if (this._globalTaskCompleted(video)) return true;
@@ -2171,6 +2213,7 @@ _finishCurrentVideo(reason) {
  duration: Number(video.duration || 0),
  paused: Boolean(video.paused),
  ended: Boolean(video.ended),
+ exactTaskStatus: this._exactVideoTaskStatus(video),
  nearbyTask: this._nearbyTaskCompletion(video),
  spatialTask: this._spatialTaskCompletion(video),
  orderedTask: this._orderedTaskCompletion(video),

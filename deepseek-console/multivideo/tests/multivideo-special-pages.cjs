@@ -394,7 +394,7 @@ async function testSharedContainerCompletionIsolation() {
     app.nextUnit = () => { navigations++; };
     const first = window.document.getElementById('shared-a');
     const second = window.document.getElementById('shared-b');
-    assert.equal(app._videoIsCompleted(first), false, 'a shared page-level completion icon must not mark video A complete');
+    assert.equal(app._videoIsCompleted(first), true, 'the first video follows the completed status marker');
     assert.equal(app._videoIsCompleted(second), false, 'a shared page-level completion icon must not mark video B complete');
 
     app._completeQueuedVideo(first, 'shared-first-ended');
@@ -585,6 +585,46 @@ async function testGlobalCompletedTaskFallback() {
     console.log('PASS: a visible completed marker skips the first task even without usable geometry');
 }
 
+async function testAnsJobAriaStatus() {
+    const plays = [];
+    const { dom, window, app } = await createApp(baseHtml(`
+        <div class="prev_title">视频</div>
+        <p>
+            <div class="ans-attach-ct videoContainer ans-job-finished" id="finished-video-card">
+                <div class="ans-job-icon ans-job-video ans-job-icon-clear" aria-label="任务点已完成">
+                    <div class="task-condition" style="display:none">完成条件 未完成任务点前不可拖动</div>
+                </div>
+                <iframe class="ans-attach-online ans-insertvideo-online" id="aria-video-a"></iframe>
+            </div>
+        </p>
+        <p>
+            <div class="ans-attach-ct videoContainer" id="pending-video-card">
+                <div class="ans-job-icon ans-job-video ans-job-icon-clear" aria-label="任务点未完成">
+                    <div class="task-condition">完成条件 观看时长需达到90%</div>
+                </div>
+                <iframe class="ans-attach-online ans-insertvideo-online" id="aria-video-b"></iframe>
+            </div>
+        </p>
+    `), (win) => {
+        for (const [id, testId] of [['aria-video-a', 'aria-first'], ['aria-video-b', 'aria-second']]) {
+            const frame = win.document.getElementById(id);
+            frame.contentWindow.HTMLMediaElement.prototype.play = async function () {
+                plays.push(testId);
+                this.dispatchEvent(new win.Event('play'));
+            };
+            frame.contentDocument.body.innerHTML = `<video id="video_html5_api" data-test-id="${testId}"></video>`;
+        }
+    });
+    await wait(100);
+    assert.ok(!plays.includes('aria-first'));
+    assert.ok(plays.includes('aria-second'));
+    assert.equal(app._currentVideo?.getAttribute('data-test-id'), 'aria-second');
+
+    app.destroy();
+    dom.window.close();
+    console.log('PASS: Chaoxing ans-job-finished and aria task status select the correct video');
+}
+
 async function main() {
     assert.match(source, /@version\s+1\.8\.4/);
     assert.doesNotMatch(source, /playbackRate/);
@@ -607,6 +647,7 @@ async function main() {
     await testTaskMarkerByDocumentOrder();
     await testSpatialTaskStatus();
     await testGlobalCompletedTaskFallback();
+    await testAnsJobAriaStatus();
     console.log('ALL PASS: 1.8.4 multi-video and special-page stress tests');
 }
 
