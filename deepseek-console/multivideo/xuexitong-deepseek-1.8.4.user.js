@@ -1935,10 +1935,24 @@ _finishCurrentVideo(reason) {
  }
  return texts;
  },
+ _completedTaskMarkerCount() {
+ const completedPattern = /(?:任务点已完成|视频已看完|已观看完成|已完成观看)/i;
+ const markerTexts = this._allTaskMarkerTexts();
+ const markerCount = markerTexts.filter((text) =>
+ completedPattern.test(text) && !/(?:未完成|尚未完成|未观看)/i.test(text)).length;
+ if (markerCount > 0) return markerCount;
+ const chunks = [];
+ for (const root of this._allSearchRoots()) {
+ const body = root.body || root;
+ const text = this._cleanText(body?.innerText || body?.textContent || '');
+ if (text) chunks.push(text);
+ }
+ const pageText = chunks.join(' ');
+ const matches = pageText.match(/任务点已完成/g);
+ return matches ? matches.length : 0;
+ },
  _globalTaskCompleted(video) {
- const completedMarkers = this._allTaskMarkerTexts().filter((text) =>
- /(?:任务点已完成|视频已看完|已观看完成|已完成观看)/i.test(text) &&
- !/(?:未完成|尚未完成|未观看)/i.test(text)).length;
+ const completedMarkers = this._completedTaskMarkerCount();
  if (!completedMarkers) return false;
  const videos = this._collectVideos();
  const index = videos.indexOf(video);
@@ -1947,9 +1961,9 @@ _finishCurrentVideo(reason) {
  _videoTaskCompleted(video) {
  const spatialTask = this._spatialTaskCompletion(video);
  if (spatialTask.found) return spatialTask.completed;
+ if (this._globalTaskCompleted(video)) return true;
  const nearbyTask = this._nearbyTaskCompletion(video);
  if (nearbyTask.found) return nearbyTask.completed;
- if (this._globalTaskCompleted(video)) return true;
  const orderedTask = this._orderedTaskCompletion(video);
  if (orderedTask.found) return orderedTask.completed;
  const wrapper = this._videoTaskWrapper(video);
@@ -2137,6 +2151,40 @@ _finishCurrentVideo(reason) {
  }
  return '';
  },
+ diagnoseVideos() {
+ const videos = this._collectVideos();
+ return {
+ scriptVersion: '1.8.4',
+ url: location.href,
+ activeNode: this._activeCatalogTitle(),
+ currentStep: this._currentStepTitle(),
+ videoCount: videos.length,
+ completedTaskMarkerCount: this._completedTaskMarkerCount(),
+ taskMarkerTexts: this._allTaskMarkerTexts(),
+ spatialMarkers: this._spatialTaskMarkers(),
+ videos: videos.map((video, index) => ({
+ index: index + 1,
+ id: video.id || '',
+ testId: video.getAttribute?.('data-test-id') || '',
+ rect: this._topLevelRect(this._videoFrameElement(video) || video),
+ currentTime: Number(video.currentTime || 0),
+ duration: Number(video.duration || 0),
+ paused: Boolean(video.paused),
+ ended: Boolean(video.ended),
+ nearbyTask: this._nearbyTaskCompletion(video),
+ spatialTask: this._spatialTaskCompletion(video),
+ orderedTask: this._orderedTaskCompletion(video),
+ globalCompleted: this._globalTaskCompleted(video),
+ taskCompleted: this._videoTaskCompleted(video),
+ })),
+ roots: this._allSearchRoots().map((root, index) => ({
+ index,
+ type: root.nodeType === 9 ? 'document' : 'shadow',
+ url: root.location?.href || root.ownerDocument?.location?.href || '',
+ textLength: this._cleanText(root.body?.innerText || root.textContent || '').length,
+ })),
+ };
+ },
  _skipWatchedCurrentUnit(reason) {
  if (this._nextUnitPending) return true;
  const key = `${location.href}|${this._activeCatalogTitle()}|${this._currentStepTitle()}`;
@@ -2168,7 +2216,8 @@ _finishCurrentVideo(reason) {
  const videos = this._collectVideos();
  const videoIndex = videos.indexOf(video) + 1;
  if (videoIndex > 0 && videos.length > 1) {
- setScriptStatus(`DeepSeek：正在播放本页第 ${videoIndex}/${videos.length} 个视频…`, 'info');
+ const completedMarkers = this._completedTaskMarkerCount();
+ setScriptStatus(`DeepSeek v1.8.4：视频 ${videos.length} 个，完成标记 ${completedMarkers} 个，正在播放第 ${videoIndex}/${videos.length} 个…`, 'info');
  console.log(`切换到本页第 ${videoIndex}/${videos.length} 个视频`);
  }
  this._currentVideo = video;

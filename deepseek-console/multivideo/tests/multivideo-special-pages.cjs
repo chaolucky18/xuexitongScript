@@ -572,8 +572,13 @@ async function testGlobalCompletedTaskFallback() {
     });
     const firstVideo = window.document.getElementById('global-video-a').contentDocument.querySelector('video');
     const secondVideo = window.document.getElementById('global-video-b').contentDocument.querySelector('video');
+    assert.equal(app._currentVideo?.getAttribute('data-test-id'), 'global-second');
     assert.equal(app._globalTaskCompleted(firstVideo), true);
     assert.equal(app._globalTaskCompleted(secondVideo), false);
+    const originalMarkerTexts = app._allTaskMarkerTexts;
+    app._allTaskMarkerTexts = () => [];
+    assert.equal(app._completedTaskMarkerCount(), 1, 'raw page text is used when marker elements are unavailable');
+    app._allTaskMarkerTexts = originalMarkerTexts;
 
     app.destroy();
     dom.window.close();
