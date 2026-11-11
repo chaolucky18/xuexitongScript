@@ -1795,9 +1795,59 @@ _finishCurrentVideo(reason) {
  }
  return { found: false, completed: false };
  },
+ _videoFrameChain(video) {
+ const chain = [];
+ let frame = this._videoFrameElement(video);
+ for (let depth = 0; frame && depth < 6; depth++) {
+ chain.push(frame);
+ try {
+ frame = frame.ownerDocument?.defaultView?.frameElement || null;
+ } catch (_) {
+ frame = null;
+ }
+ }
+ return chain;
+ },
+ _orderedTaskCompletion(video) {
+ const markerPattern = /(?:任务点|完成条件|观看时长)/i;
+ for (const frame of this._videoFrameChain(video)) {
+ const doc = frame.ownerDocument;
+ if (!doc?.body) continue;
+ let markers = [];
+ try {
+ markers = Array.from(doc.body.querySelectorAll('*')).filter((el) => {
+ const text = this._cleanText(el.innerText || el.textContent || '');
+ if (!text || text.length > 180 || !markerPattern.test(text)) return false;
+ return !Array.from(el.children).some((child) =>
+ markerPattern.test(this._cleanText(child.innerText || child.textContent || '')));
+ });
+ } catch (_) {
+ continue;
+ }
+ const preceding = markers.filter((marker) => {
+ try {
+ return Boolean(frame.compareDocumentPosition(marker) & 2);
+ } catch (_) {
+ return false;
+ }
+ });
+ const marker = preceding[preceding.length - 1];
+ if (marker) {
+ const text = this._cleanText(marker.innerText || marker.textContent || '');
+ return {
+ found: true,
+ completed: /(?:任务点已完成|视频已看完|已观看完成|已完成观看)/i.test(text) &&
+ !/(?:未完成|尚未完成|未观看)/i.test(text),
+ };
+ }
+ }
+ return { found: false, completed: false };
+ },
  _videoTaskCompleted(video) {
  const nearbyTask = this._nearbyTaskCompletion(video);
  if (nearbyTask.found) return nearbyTask.completed;
+ const orderedTask = this._orderedTaskCompletion(video);
+ if (orderedTask.found) return orderedTask.completed;
  const wrapper = this._videoTaskWrapper(video);
  if (wrapper) {
  const mediaCount = this._videoMediaCountWithin(wrapper);
