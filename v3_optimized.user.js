@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通自动刷课脚本 V3 稳定版
 // @namespace    local.codex.xuexitong
-// @version      3.4.0
+// @version      3.4.2
 // @description  自动播放、自动切换下一节，并在页面结构异常时安全停止
 // @author       Codex
 // @match        *://mooc1.chaoxing.com/mycourse/studentstudy*
@@ -126,7 +126,7 @@
                 videoCheckInterval: 1000,
                 guardNoProgressMs: 7000,
                 guardResumeCooldownMs: 1500,
-                autoAdvanceNoVideo: false,
+                autoAdvanceNoVideo: true,
             },
             _videoEl: null,
             _treeContainerEl: null,
@@ -169,6 +169,11 @@
                 showStatus('正在切换', '正在查找下一小节');
                 console.log("%c=== 准备切换到下一小节 ===", "color:#2196F3;font-size:14px");
                 try {
+                    if (!this._initCellData()) {
+                        this._nextUnitPending = false;
+                        showStatus('已停止', '无法确认目录中的当前小节', 'error');
+                        return;
+                    }
                     const el = this._getTreeContainer();
                     const cells = el.children("ul").children("li");
                     const nCells = $(cells.get(this._cellData.currentCellIndex)).find('.posCatalog_select:not(.firstLayer)');
@@ -177,20 +182,18 @@
                         const nextNIndex = this._cellData.currentNCellIndex + 1;
                         console.log(`%c切换到同章节下一个视频: ${nextNIndex + 1}/${nCells.length}`, "color:#FF9800");
                         this.playCurrentIndex(nCells.get(nextNIndex));
-                    } else {
-                        const nextIndex = this._cellData.currentCellIndex + 1;
-                        if (nextIndex >= cells.length) {
-                            showStatus('播放队列结束', '目录中已没有下一小节');
-                            console.log("%c=====================================", "color:#4CAF50;font-size:16px");
-                            console.log("%c==============本课程学习完成了==============", "color:#4CAF50;font-size:16px;font-weight:bold");
-                            console.log("%c=====================================", "color:#4CAF50;font-size:16px");
+                        return;
+                    }
+                    for (let index = this._cellData.currentCellIndex + 1; index < cells.length; index++) {
+                        const nextCell = $(cells.get(index)).find('.posCatalog_select:not(.firstLayer)').get(0);
+                        if (nextCell) {
+                            this.playCurrentIndex(nextCell);
                             return;
                         }
-                        console.log(`%c切换到下一个章节: ${nextIndex + 1}/${cells.length}`, "color:#FF9800");
-                        this._cellData.currentCellIndex = nextIndex;
-                        this._cellData.currentNCellIndex = 0;
-                        this.playCurrentIndex();
                     }
+                    this._nextUnitPending = false;
+                    showStatus('播放队列结束', '目录中已没有下一小节');
+                    console.log('%c目录中已没有下一小节', 'color:#4CAF50');
                 } catch (error) {
                     this._nextUnitPending = false;
                     console.error('切换下一小节失败:', error);
@@ -302,6 +305,7 @@
             _guardLastWallTs: 0,
             _guardLastResumeTs: 0,
             async play() {
+                if (this._nextUnitPending) return;
                 try {
                     const el = this._getVideoEl();
                     if (el == null) {
@@ -310,7 +314,7 @@
                         }
                         if (this._advanceLearningStep()) {
                             showStatus('正在切换', '正在进入视频页');
-                            console.log("%c当前不在视频页，已尝试切到下一学习步骤，2秒后重试", "color:#607D8B");
+                            console.log("%c当前不在视频页，已尝试切到当前小节的视频页签，2秒后重试", "color:#607D8B");
                             setTimeout(() => {
                                 this.play();
                             }, 2000);
@@ -384,7 +388,7 @@
 
                 const videoTab = $(".prev_white:visible").filter((_, el) => {
                     const text = ($(el).text() || "").replace(/\s+/g, "");
-                    return text === "2视频" || text === "视频";
+                    return /^[0-9０-９]*视频$/.test(text);
                 }).get(0);
                 if (clickElement(videoTab, "“视频”页签")) {
                     return true;
@@ -482,7 +486,6 @@
                 }
             },
             playCurrentIndex(nCell) {
-                this._nextUnitPending = false;
                 if (!nCell) {
                     const el = this._getTreeContainer();
                     const cells = el.children("ul").children("li");
@@ -493,6 +496,7 @@
                 const $nCell = $(nCell);
                 const clickableSpan = $nCell.find(".posCatalog_name")[0];
                 if (!clickableSpan) {
+                    this._nextUnitPending = false;
                     showStatus('切换失败', '没有找到可打开的课程节点', 'error');
                     console.error("%c===========找不到可点击的课程节点，播放下一个视频失败==============", "color:#F44336");
                     return;
@@ -506,6 +510,12 @@
 
                 console.log("%c等待视频加载...", "color:#FF9800");
                 setTimeout(() => {
+                    this._nextUnitPending = false;
+                    if (!$nCell.hasClass('posCatalog_active')) {
+                        showStatus('切换未完成', '课程页未进入下一小节，请检查页面提示', 'error');
+                        return;
+                    }
+                    this._stepSwitchPending = false;
                     this._initCellData();
                     if (this.configs.autoplay) {
                         this.play();
@@ -545,6 +555,7 @@
                 }
 
                 console.log(`%c课程信息: ${this._cellData.cells}章, ${this._cellData.nCells}节, 当前: 第${this._cellData.currentCellIndex + 1}章第${this._cellData.currentNCellIndex + 1}节`, "color:#607D8B");
+                return foundCurrent;
             },
             _getTreeContainer() {
                 if (!this._treeContainerEl) {
