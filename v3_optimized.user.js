@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通自动刷课脚本 V3 稳定版
 // @namespace    local.codex.xuexitong
-// @version      3.3.0
+// @version      3.4.0
 // @description  自动播放、自动切换下一节，并在页面结构异常时安全停止
 // @author       Codex
 // @match        *://mooc1.chaoxing.com/mycourse/studentstudy*
@@ -24,6 +24,61 @@
         window[BOOT_TIMER_KEY] = null;
     }
 
+    const statusId = 'xuexitong-v3-status';
+    document.getElementById(statusId)?.remove();
+    const statusHost = document.createElement('div');
+    statusHost.id = statusId;
+    const statusRoot = statusHost.attachShadow({ mode: 'open' });
+    statusRoot.innerHTML = `
+        <style>
+            :host { all: initial; position: fixed; bottom: 16px; left: 16px; z-index: 10000;
+                width: min(272px, calc(100vw - 32px)); pointer-events: none; }
+            section { padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 12px;
+                background: #fff; color: #0f172a; box-shadow: 0 6px 24px #0f172a26;
+                font: 14px/1.5 system-ui, sans-serif; }
+            header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+            [role="status"] { color: #475569; text-align: right; }
+            [data-tone="active"] { color: #166534; }
+            [data-tone="error"] { color: #b91c1c; }
+            #detail { margin-top: 4px; color: #475569; overflow-wrap: anywhere; }
+            progress { display: block; width: 100%; height: 8px; margin-top: 8px; accent-color: #2563eb; }
+            #time { margin-top: 4px; font-size: 12px; color: #475569; font-variant-numeric: tabular-nums; }
+            [hidden] { display: none; }
+        </style>
+        <section aria-label="学习通 V3 运行状态">
+            <header><strong>学习通 V3</strong><span role="status"></span></header>
+            <div id="detail"></div>
+            <progress aria-label="当前视频进度" hidden></progress>
+            <div id="time" hidden></div>
+        </section>
+    `;
+    const statusLabel = statusRoot.querySelector('[role="status"]');
+    const statusDetail = statusRoot.querySelector('#detail');
+    const statusProgress = statusRoot.querySelector('progress');
+    const statusTime = statusRoot.querySelector('#time');
+    document.body.appendChild(statusHost);
+    showStatus('初始化中', '正在等待课程页加载');
+
+    function formatTime(seconds) {
+        const total = Math.floor(seconds);
+        return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    }
+
+    function showStatus(label, detail, tone = '', video = null) {
+        if (statusLabel.textContent !== label) statusLabel.textContent = label;
+        statusLabel.dataset.tone = tone;
+        if (statusDetail.textContent !== detail) statusDetail.textContent = detail;
+        const hasProgress = Number.isFinite(video?.duration) && video.duration > 0 &&
+            Number.isFinite(video.currentTime);
+        statusProgress.hidden = !hasProgress;
+        statusTime.hidden = !hasProgress;
+        if (hasProgress) {
+            statusProgress.max = video.duration;
+            statusProgress.value = video.currentTime;
+            statusTime.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+        }
+    }
+
     if (typeof window.jQuery === 'undefined') {
         const script = document.createElement('script');
         script.src = 'https://code.jquery.com/jquery-3.6.0.min.js';
@@ -32,6 +87,7 @@
             console.log("jQuery loaded.");
             waitForCoursePage();
         };
+        script.onerror = () => showStatus('启动失败', '无法加载 jQuery，请刷新后重试', 'error');
         document.head.appendChild(script);
     } else {
         waitForCoursePage();
@@ -52,11 +108,15 @@
                 clearInterval(window[BOOT_TIMER_KEY]);
                 window[BOOT_TIMER_KEY] = null;
                 console.error('%c脚本启动超时：未检测到课程目录（#coursetree）。请确认当前处于课程播放页。', 'color:#F44336;font-weight:bold');
+                showStatus('启动失败', '未找到课程目录，请打开课程播放页', 'error');
             }
         }, 1000);
     }
 
     function initializePlayer() {
+        let observedVideo;
+        let observedTime;
+        let lastProgressAt;
         const app = {
             configs: {
                 playbackRate: 1.5,
@@ -106,6 +166,7 @@
                 }
                 this._nextUnitPending = true;
                 this._clearCheckInterval();
+                showStatus('正在切换', '正在查找下一小节');
                 console.log("%c=== 准备切换到下一小节 ===", "color:#2196F3;font-size:14px");
                 try {
                     const el = this._getTreeContainer();
@@ -119,6 +180,7 @@
                     } else {
                         const nextIndex = this._cellData.currentCellIndex + 1;
                         if (nextIndex >= cells.length) {
+                            showStatus('播放队列结束', '目录中已没有下一小节');
                             console.log("%c=====================================", "color:#4CAF50;font-size:16px");
                             console.log("%c==============本课程学习完成了==============", "color:#4CAF50;font-size:16px;font-weight:bold");
                             console.log("%c=====================================", "color:#4CAF50;font-size:16px");
@@ -132,6 +194,7 @@
                 } catch (error) {
                     this._nextUnitPending = false;
                     console.error('切换下一小节失败:', error);
+                    showStatus('切换失败', '无法切换到下一小节', 'error');
                 }
             },
             _clearCheckInterval() {
@@ -145,9 +208,32 @@
                 this._guardLastTime = 0;
                 this._guardLastWallTs = 0;
                 this._guardLastResumeTs = 0;
+                this._showPlaybackStatus(this._videoEl);
                 this._checkInterval = setInterval(() => {
                     this._checkVideoStatus();
                 }, this.configs.videoCheckInterval);
+            },
+            _showPlaybackStatus(video) {
+                const title = this._cellData.currentVideoTitle || '当前视频';
+                const now = Date.now();
+                if (video !== observedVideo || video?.currentTime !== observedTime || video?.paused) {
+                    observedVideo = video;
+                    observedTime = video?.currentTime;
+                    lastProgressAt = now;
+                }
+                if (!video) {
+                    showStatus('等待播放器', title);
+                } else if (video.error) {
+                    showStatus('播放异常', title, 'error', video);
+                } else if (video.ended) {
+                    showStatus('视频已播完', title, '', video);
+                } else if (video.paused) {
+                    showStatus('已暂停', title, '', video);
+                } else if (video.readyState < 3 || video.seeking || now - lastProgressAt >= this.configs.guardNoProgressMs) {
+                    showStatus('缓冲中', title, '', video);
+                } else {
+                    showStatus('播放中', title, 'active', video);
+                }
             },
             _tryResumePlayback(reason) {
                 const now = Date.now();
@@ -171,6 +257,7 @@
             _checkVideoStatus() {
                 try {
                     const video = this._getVideoEl();
+                    if (this._isPlaying) this._showPlaybackStatus(video);
                     if (!video) return;
 
                     if (video.paused && this._isPlaying) {
@@ -203,6 +290,7 @@
                     }
                 } catch (e) {
                     console.error("视频状态检查失败:", e);
+                    showStatus('状态异常', '无法读取视频状态', 'error');
                 }
             },
             _tryTimes: 0,
@@ -221,6 +309,7 @@
                             throw new Error('视频组件尚未加载完成');
                         }
                         if (this._advanceLearningStep()) {
+                            showStatus('正在切换', '正在进入视频页');
                             console.log("%c当前不在视频页，已尝试切到下一学习步骤，2秒后重试", "color:#607D8B");
                             setTimeout(() => {
                                 this.play();
@@ -238,11 +327,13 @@
                             this.nextUnit();
                         } else {
                             console.warn('%c当前小节未发现视频或可识别的学习步骤，已安全停止。确认无需完成课件后，可执行 app.nextUnit()。', 'color:#FF9800');
+                            showStatus('已停止', '当前小节未找到视频或可识别的学习步骤');
                         }
                         return;
                     }
 
                     this._isPlaying = true;
+                    showStatus('正在启动播放', this._cellData.currentVideoTitle || '当前视频');
                     this._videoEventHandle();
                     el.playbackRate = this.configs.playbackRate;
 
@@ -259,9 +350,11 @@
                     if (this._tryTimes >= this.configs.maxRetries) {
                         console.error("%c视频播放失败，已达到最大重试次数", "color:#F44336;font-weight:bold", e);
                         this._clearCheckInterval();
+                        showStatus('播放失败', '已达到最大重试次数', 'error');
                         return;
                     }
                     this._tryTimes++;
+                    showStatus('正在重试', `第 ${this._tryTimes} / ${this.configs.maxRetries} 次`);
                     console.log(`%c播放失败，${this.configs.retryInterval/1000}秒后重试 (${this._tryTimes}/${this.configs.maxRetries})`, "color:#FF9800");
                     setTimeout(() => {
                         this.play();
@@ -308,17 +401,20 @@
             },
             _advanceChapterTest() {
                 if (this._chapterAdvanceTimes >= 3) {
+                    showStatus('已停止', '无法继续切换章节测验页面', 'error');
                     console.error('%c章节测验页面连续跳转失败，已停止以避免页面循环。请手动处理后执行 app.run()。', 'color:#F44336;font-weight:bold');
                     return;
                 }
 
                 const nextButton = $('#prevNextFocusNext:visible, #right1:visible, .nextChapter:visible').first().get(0);
                 if (!nextButton) {
+                    showStatus('已停止', '章节测验页面没有可用的下一步');
                     console.warn('%c未找到章节测验的下一步按钮，已停止。', 'color:#FF9800');
                     return;
                 }
 
                 this._chapterAdvanceTimes++;
+                showStatus('正在切换', '正在切换学习步骤');
                 console.log('%c检测到章节测验，尝试进入下一学习步骤', 'color:#607D8B');
                 nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                 setTimeout(() => this.play(), 2000);
@@ -330,6 +426,7 @@
                 this._stepNavigationBound = true;
 
                 const reenterVideoMode = () => {
+                    showStatus('正在切换', '正在加载视频页');
                     this._videoEl = null;
                     this._isPlaying = false;
                     this._stepSwitchPending = true;
@@ -352,6 +449,7 @@
             },
             _handlePlayError(error) {
                 console.error("播放错误详情:", error);
+                showStatus('播放异常', '正在尝试重新播放', 'error');
                 const video = this._getVideoEl();
                 if (video) {
                     video.muted = true;
@@ -370,10 +468,12 @@
                         }
                         this._isPlaying = false;
                         if (this._tryTimes >= this.configs.maxRetries) {
+                            showStatus('播放失败', '已达到最大重试次数', 'error');
                             console.error('%c静音播放失败，已达到最大重试次数', 'color:#F44336;font-weight:bold', e);
                             return;
                         }
                         this._tryTimes++;
+                        showStatus('正在重试', `第 ${this._tryTimes} / ${this.configs.maxRetries} 次`);
                         this._delayedNextUnitTimer = setTimeout(() => {
                             this._delayedNextUnitTimer = null;
                             this.play();
@@ -393,11 +493,13 @@
                 const $nCell = $(nCell);
                 const clickableSpan = $nCell.find(".posCatalog_name")[0];
                 if (!clickableSpan) {
+                    showStatus('切换失败', '没有找到可打开的课程节点', 'error');
                     console.error("%c===========找不到可点击的课程节点，播放下一个视频失败==============", "color:#F44336");
                     return;
                 }
 
                 console.log(`%c点击切换到: ${$(clickableSpan).attr('title') || '未知标题'}`, "color:#2196F3");
+                showStatus('正在切换', $(clickableSpan).attr('title') || '正在加载下一小节');
                 $(clickableSpan).click();
                 this._videoEl = null;
                 this._isPlaying = false;
@@ -407,6 +509,8 @@
                     this._initCellData();
                     if (this.configs.autoplay) {
                         this.play();
+                    } else {
+                        showStatus('等待播放', this._cellData.currentVideoTitle || '当前小节');
                     }
                 }, 3000);
             },
@@ -522,6 +626,7 @@
                 console.warn(`%c============'${title}' 播放完成=============`, "color:#4CAF50;font-weight:bold");
                 this._isPlaying = false;
                 this._clearCheckInterval();
+                this._showPlaybackStatus(this._videoEl);
                 setTimeout(() => this.nextUnit(), 1000);
             },
             _handleVideoLoaded(e) {
@@ -561,6 +666,7 @@
                 document.addEventListener('visibilitychange', resumePlaybackNow);
             },
             destroy() {
+                statusHost.remove();
                 this._isPlaying = false;
                 this._clearCheckInterval();
                 this._detachVideoEvents();
@@ -587,6 +693,7 @@
             app._bindPageGuards();
         } catch (error) {
             console.error("%c脚本运行失败: ", "color:#F44336;font-weight:bold", error.message);
+            showStatus('启动失败', '无法初始化课程播放器', 'error');
             console.log("请检查是否在正确的课程播放页面，或者页面结构是否再次发生改变。");
         }
     }
